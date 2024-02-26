@@ -1,0 +1,11 @@
+﻿{
+  "Group": "Test",
+  "FriendlyName": "POC - Distribution Of Customers By Country",
+  "SystemName": "Test.DistOfCustByCountryPlugin",
+  "Version": "1.0",
+  "SupportedVersions": [ "4.70" ],
+  "Author": "Rai Arslan",
+  "DisplayOrder": 1,
+  "FileName": "Nop.Plugin.Test.DistOfCustByCountryPlugin.dll",
+  "Description": "This is a test widghet with backend & UI."
+}

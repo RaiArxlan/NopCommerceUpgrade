@@ -1,48 +1,38 @@
-﻿using System.Collections.Generic;
-using Nop.Core.Domain.Payments;
+﻿using Nop.Core.Domain.Payments;
 
-namespace Nop.Services.Payments
+namespace Nop.Services.Payments;
+
+/// <summary>
+/// Refund payment result
+/// </summary>
+public partial class RefundPaymentResult
 {
-    /// <summary>
-    /// Represents a RefundPaymentResult
-    /// </summary>
-    public partial class RefundPaymentResult
+    public RefundPaymentResult()
     {
-        private PaymentStatus _newPaymentStatus = PaymentStatus.Pending;
-        public IList<string> Errors { get; set; }
-
-        public RefundPaymentResult() 
-        {
-            this.Errors = new List<string>();
-        }
-
-        public bool Success
-        {
-            get { return (this.Errors.Count == 0); }
-        }
-
-        public void AddError(string error) 
-        {
-            this.Errors.Add(error);
-        }
-
-        #region Properties
-
-        /// <summary>
-        /// Gets or sets a payment status after processing
-        /// </summary>
-        public PaymentStatus NewPaymentStatus
-        {
-            get
-            {
-                return _newPaymentStatus;
-            }
-            set
-            {
-                _newPaymentStatus = value;
-            }
-        }
-
-        #endregion
+        Errors = new List<string>();
     }
+
+    /// <summary>
+    /// Gets a value indicating whether request has been completed successfully
+    /// </summary>
+    public bool Success => !Errors.Any();
+
+    /// <summary>
+    /// Add error
+    /// </summary>
+    /// <param name="error">Error</param>
+    public void AddError(string error)
+    {
+        Errors.Add(error);
+    }
+
+    /// <summary>
+    /// Errors
+    /// </summary>
+    public IList<string> Errors { get; set; }
+
+    /// <summary>
+    /// Gets or sets a payment status after processing
+    /// </summary>
+    public PaymentStatus NewPaymentStatus { get; set; } = PaymentStatus.Pending;
 }

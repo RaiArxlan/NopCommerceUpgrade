@@ -1,11 +1,10 @@
-﻿using Nop.Web.Framework.Mvc;
+﻿using Nop.Web.Framework.Models;
 
-namespace Nop.Web.Models.Blogs
+namespace Nop.Web.Models.Blogs;
+
+public partial record BlogPostTagModel : BaseNopModel
 {
-    public partial class BlogPostTagModel : BaseNopModel
-    {
-        public string Name { get; set; }
+    public string Name { get; set; }
 
-        public int BlogPostCount { get; set; }
-    }
+    public int BlogPostCount { get; set; }
 }

@@ -1,195 +1,194 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Globalization;
 using Nop.Core.Caching;
-using Nop.Core.Data;
 using Nop.Core.Domain.Localization;
+using Nop.Data;
 using Nop.Services.Configuration;
-using Nop.Services.Events;
 using Nop.Services.Stores;
 
-namespace Nop.Services.Localization
+namespace Nop.Services.Localization;
+
+/// <summary>
+/// Language service
+/// </summary>
+public partial class LanguageService : ILanguageService
 {
-    /// <summary>
-    /// Language service
-    /// </summary>
-    public partial class LanguageService : ILanguageService
+    #region Fields
+
+    protected readonly IRepository<Language> _languageRepository;
+    protected readonly ISettingService _settingService;
+    protected readonly IStaticCacheManager _staticCacheManager;
+    protected readonly IStoreMappingService _storeMappingService;
+    protected readonly LocalizationSettings _localizationSettings;
+
+    #endregion
+
+    #region Ctor
+
+    public LanguageService(IRepository<Language> languageRepository,
+        ISettingService settingService,
+        IStaticCacheManager staticCacheManager,
+        IStoreMappingService storeMappingService,
+        LocalizationSettings localizationSettings)
     {
-        #region Constants
+        _languageRepository = languageRepository;
+        _settingService = settingService;
+        _staticCacheManager = staticCacheManager;
+        _storeMappingService = storeMappingService;
+        _localizationSettings = localizationSettings;
+    }
 
-        /// <summary>
-        /// Key for caching
-        /// </summary>
-        /// <remarks>
-        /// {0} : language ID
-        /// </remarks>
-        private const string LANGUAGES_BY_ID_KEY = "Nop.language.id-{0}";
-        /// <summary>
-        /// Key for caching
-        /// </summary>
-        /// <remarks>
-        /// {0} : show hidden records?
-        /// </remarks>
-        private const string LANGUAGES_ALL_KEY = "Nop.language.all-{0}";
-        /// <summary>
-        /// Key pattern to clear cache
-        /// </summary>
-        private const string LANGUAGES_PATTERN_KEY = "Nop.language.";
+    #endregion
 
-        #endregion
+    #region Methods
 
-        #region Fields
+    /// <summary>
+    /// Deletes a language
+    /// </summary>
+    /// <param name="language">Language</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteLanguageAsync(Language language)
+    {
+        ArgumentNullException.ThrowIfNull(language);
 
-        private readonly IRepository<Language> _languageRepository;
-        private readonly IStoreMappingService _storeMappingService;
-        private readonly ICacheManager _cacheManager;
-        private readonly ISettingService _settingService;
-        private readonly LocalizationSettings _localizationSettings;
-        private readonly IEventPublisher _eventPublisher;
-
-        #endregion
-
-        #region Ctor
-
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="cacheManager">Cache manager</param>
-        /// <param name="languageRepository">Language repository</param>
-        /// <param name="storeMappingService">Store mapping service</param>
-        /// <param name="settingService">Setting service</param>
-        /// <param name="localizationSettings">Localization settings</param>
-        /// <param name="eventPublisher">Event published</param>
-        public LanguageService(ICacheManager cacheManager,
-            IRepository<Language> languageRepository,
-            IStoreMappingService storeMappingService,
-            ISettingService settingService,
-            LocalizationSettings localizationSettings,
-            IEventPublisher eventPublisher)
-        {
-            this._cacheManager = cacheManager;
-            this._languageRepository = languageRepository;
-            this._storeMappingService = storeMappingService;
-            this._settingService = settingService;
-            this._localizationSettings = localizationSettings;
-            this._eventPublisher = eventPublisher;
-        }
-
-        #endregion
-        
-        #region Methods
-
-        /// <summary>
-        /// Deletes a language
-        /// </summary>
-        /// <param name="language">Language</param>
-        public virtual void DeleteLanguage(Language language)
-        {
-            if (language == null)
-                throw new ArgumentNullException("language");
-            
-            //update default admin area language (if required)
-            if (_localizationSettings.DefaultAdminLanguageId == language.Id)
+        //update default admin area language (if required)
+        if (_localizationSettings.DefaultAdminLanguageId == language.Id)
+            foreach (var activeLanguage in await GetAllLanguagesAsync())
             {
-                foreach (var activeLanguage in GetAllLanguages())
-                {
-                    if (activeLanguage.Id != language.Id)
-                    {
-                        _localizationSettings.DefaultAdminLanguageId = activeLanguage.Id;
-                        _settingService.SaveSetting(_localizationSettings);
-                        break;
-                    }
-                }
+                if (activeLanguage.Id == language.Id)
+                    continue;
+
+                _localizationSettings.DefaultAdminLanguageId = activeLanguage.Id;
+                await _settingService.SaveSettingAsync(_localizationSettings);
+                break;
             }
-            
-            _languageRepository.Delete(language);
 
-            //cache
-            _cacheManager.RemoveByPattern(LANGUAGES_PATTERN_KEY);
+        await _languageRepository.DeleteAsync(language);
+    }
 
-            //event notification
-            _eventPublisher.EntityDeleted(language);
-        }
+    /// <summary>
+    /// Gets all languages
+    /// </summary>
+    /// <param name="storeId">Load records allowed only in a specified store; pass 0 to load all records</param>
+    /// <param name="showHidden">A value indicating whether to show hidden records</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the languages
+    /// </returns>
+    public virtual async Task<IList<Language>> GetAllLanguagesAsync(bool showHidden = false, int storeId = 0)
+    {
+        //cacheable copy
+        var key = _staticCacheManager.PrepareKeyForDefaultCache(NopLocalizationDefaults.LanguagesAllCacheKey, storeId, showHidden);
 
-        /// <summary>
-        /// Gets all languages
-        /// </summary>
-        /// <param name="storeId">Load records allowed only in a specified store; pass 0 to load all records</param>
-        /// <param name="showHidden">A value indicating whether to show hidden records</param>
-        /// <returns>Language collection</returns>
-        public virtual IList<Language> GetAllLanguages(bool showHidden = false, int storeId = 0)
+        var languages = await _staticCacheManager.GetAsync(key, async () =>
         {
-            string key = string.Format(LANGUAGES_ALL_KEY, showHidden);
-            var languages = _cacheManager.Get(key, () =>
+            var allLanguages = await _languageRepository.GetAllAsync(query =>
             {
-                var query = _languageRepository.Table;
                 if (!showHidden)
                     query = query.Where(l => l.Published);
-                query = query.OrderBy(l => l.DisplayOrder);
-                return query.ToList();
+                query = query.OrderBy(l => l.DisplayOrder).ThenBy(l => l.Id);
+
+                return query;
             });
 
             //store mapping
             if (storeId > 0)
+                allLanguages = await allLanguages
+                    .WhereAwait(async l => await _storeMappingService.AuthorizeAsync(l, storeId))
+                    .ToListAsync();
+
+            return allLanguages;
+        });
+
+        return languages;
+    }
+
+    /// <summary>
+    /// Gets all languages
+    /// </summary>
+    /// <param name="storeId">Load records allowed only in a specified store; pass 0 to load all records</param>
+    /// <param name="showHidden">A value indicating whether to show hidden records</param>
+    /// <returns>
+    /// The languages
+    /// </returns>
+    public virtual IList<Language> GetAllLanguages(bool showHidden = false, int storeId = 0)
+    {
+        //cacheable copy
+        var key = _staticCacheManager.PrepareKeyForDefaultCache(NopLocalizationDefaults.LanguagesAllCacheKey, storeId, showHidden);
+
+        var languages = _staticCacheManager.Get(key, () =>
+        {
+            var allLanguages = _languageRepository.GetAll(query =>
             {
-                languages = languages
+                if (!showHidden)
+                    query = query.Where(l => l.Published);
+                query = query.OrderBy(l => l.DisplayOrder).ThenBy(l => l.Id);
+
+                return query;
+            });
+
+            //store mapping
+            if (storeId > 0)
+                allLanguages = allLanguages
                     .Where(l => _storeMappingService.Authorize(l, storeId))
                     .ToList();
-            }
-            return languages;
-        }
 
-        /// <summary>
-        /// Gets a language
-        /// </summary>
-        /// <param name="languageId">Language identifier</param>
-        /// <returns>Language</returns>
-        public virtual Language GetLanguageById(int languageId)
-        {
-            if (languageId == 0)
-                return null;
-            
-            string key = string.Format(LANGUAGES_BY_ID_KEY, languageId);
-            return _cacheManager.Get(key, () => _languageRepository.GetById(languageId));
-        }
+            return allLanguages;
+        });
 
-        /// <summary>
-        /// Inserts a language
-        /// </summary>
-        /// <param name="language">Language</param>
-        public virtual void InsertLanguage(Language language)
-        {
-            if (language == null)
-                throw new ArgumentNullException("language");
-
-            _languageRepository.Insert(language);
-
-            //cache
-            _cacheManager.RemoveByPattern(LANGUAGES_PATTERN_KEY);
-
-            //event notification
-            _eventPublisher.EntityInserted(language);
-        }
-
-        /// <summary>
-        /// Updates a language
-        /// </summary>
-        /// <param name="language">Language</param>
-        public virtual void UpdateLanguage(Language language)
-        {
-            if (language == null)
-                throw new ArgumentNullException("language");
-            
-            //update language
-            _languageRepository.Update(language);
-
-            //cache
-            _cacheManager.RemoveByPattern(LANGUAGES_PATTERN_KEY);
-
-            //event notification
-            _eventPublisher.EntityUpdated(language);
-        }
-
-        #endregion
+        return languages;
     }
+
+    /// <summary>
+    /// Gets a language
+    /// </summary>
+    /// <param name="languageId">Language identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the language
+    /// </returns>
+    public virtual async Task<Language> GetLanguageByIdAsync(int languageId)
+    {
+        return await _languageRepository.GetByIdAsync(languageId, cache => default);
+    }
+
+    /// <summary>
+    /// Inserts a language
+    /// </summary>
+    /// <param name="language">Language</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertLanguageAsync(Language language)
+    {
+        await _languageRepository.InsertAsync(language);
+    }
+
+    /// <summary>
+    /// Updates a language
+    /// </summary>
+    /// <param name="language">Language</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task UpdateLanguageAsync(Language language)
+    {
+        //update language
+        await _languageRepository.UpdateAsync(language);
+    }
+
+    /// <summary>
+    /// Get 2 letter ISO language code
+    /// </summary>
+    /// <param name="language">Language</param>
+    /// <returns>ISO language code</returns>
+    public virtual string GetTwoLetterIsoLanguageName(Language language)
+    {
+        ArgumentNullException.ThrowIfNull(language);
+
+        if (string.IsNullOrEmpty(language.LanguageCulture))
+            return "en";
+
+        var culture = new CultureInfo(language.LanguageCulture);
+        var code = culture.TwoLetterISOLanguageName;
+
+        return string.IsNullOrEmpty(code) ? "en" : code;
+    }
+
+    #endregion
 }

@@ -1,58 +1,53 @@
-﻿using System;
-using Nop.Core.Domain.Directory;
-using Nop.Services.Configuration;
-using Nop.Services.Tasks;
+﻿using Nop.Core.Domain.Directory;
+using Nop.Services.ScheduleTasks;
 
-namespace Nop.Services.Directory
+namespace Nop.Services.Directory;
+
+/// <summary>
+/// Represents a task for updating exchange rates
+/// </summary>
+public partial class UpdateExchangeRateTask : IScheduleTask
 {
-    /// <summary>
-    /// Represents a task for updating exchange rates
-    /// </summary>
-    public partial class UpdateExchangeRateTask : ITask
+    #region Fields
+
+    protected readonly CurrencySettings _currencySettings;
+    protected readonly ICurrencyService _currencyService;
+
+    #endregion
+
+    #region Ctor
+
+    public UpdateExchangeRateTask(CurrencySettings currencySettings,
+        ICurrencyService currencyService)
     {
-        private readonly ICurrencyService _currencyService;
-        private readonly ISettingService _settingService;
-        private readonly CurrencySettings _currencySettings;
+        _currencySettings = currencySettings;
+        _currencyService = currencyService;
+    }
 
-        public UpdateExchangeRateTask(ICurrencyService currencyService, 
-            ISettingService settingService, CurrencySettings currencySettings)
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Executes a task
+    /// </summary>
+    public async System.Threading.Tasks.Task ExecuteAsync()
+    {
+        if (!_currencySettings.AutoUpdateEnabled)
+            return;
+
+        var exchangeRates = await _currencyService.GetCurrencyLiveRatesAsync();
+        foreach (var exchangeRate in exchangeRates)
         {
-            this._currencyService = currencyService;
-            this._settingService = settingService;
-            this._currencySettings = currencySettings;
-        }
+            var currency = await _currencyService.GetCurrencyByCodeAsync(exchangeRate.CurrencyCode);
+            if (currency == null)
+                continue;
 
-        /// <summary>
-        /// Executes a task
-        /// </summary>
-        public void Execute()
-        {
-            if (!_currencySettings.AutoUpdateEnabled)
-                return;
-
-            long lastUpdateTimeTicks = _currencySettings.LastUpdateTime;
-            DateTime lastUpdateTime = DateTime.FromBinary(lastUpdateTimeTicks);
-            lastUpdateTime = DateTime.SpecifyKind(lastUpdateTime, DateTimeKind.Utc);
-            if (lastUpdateTime.AddHours(1) < DateTime.UtcNow)
-            {
-                //update rates each one hour
-                var exchangeRates = _currencyService.GetCurrencyLiveRates(_currencyService.GetCurrencyById(_currencySettings.PrimaryExchangeRateCurrencyId).CurrencyCode);
-
-                foreach (var exchageRate in exchangeRates)
-                {
-                    var currency = _currencyService.GetCurrencyByCode(exchageRate.CurrencyCode);
-                    if (currency != null)
-                    {
-                        currency.Rate = exchageRate.Rate;
-                        currency.UpdatedOnUtc = DateTime.UtcNow;
-                        _currencyService.UpdateCurrency(currency);
-                    }
-                }
-
-                //save new update time value
-                _currencySettings.LastUpdateTime = DateTime.UtcNow.ToBinary();
-                _settingService.SaveSetting(_currencySettings);
-            }
+            currency.Rate = exchangeRate.Rate;
+            currency.UpdatedOnUtc = DateTime.UtcNow;
+            await _currencyService.UpdateCurrencyAsync(currency);
         }
     }
+
+    #endregion
 }

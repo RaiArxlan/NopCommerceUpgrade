@@ -1,144 +1,130 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using Nop.Core;
-using Nop.Core.Data;
+﻿using Nop.Core;
 using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Logging;
 using Nop.Data;
 
-namespace Nop.Services.Logging
+namespace Nop.Services.Logging;
+
+/// <summary>
+/// Default logger
+/// </summary>
+public partial class DefaultLogger : ILogger
 {
-    /// <summary>
-    /// Default logger
-    /// </summary>
-    public partial class DefaultLogger : ILogger
+    #region Fields
+
+    protected readonly CommonSettings _commonSettings;
+
+    protected readonly IRepository<Log> _logRepository;
+    protected readonly IWebHelper _webHelper;
+
+    #endregion
+
+    #region Ctor
+
+    public DefaultLogger(CommonSettings commonSettings,
+        IRepository<Log> logRepository,
+        IWebHelper webHelper)
     {
-        #region Fields
+        _commonSettings = commonSettings;
+        _logRepository = logRepository;
+        _webHelper = webHelper;
+    }
 
-        private readonly IRepository<Log> _logRepository;
-        private readonly IWebHelper _webHelper;
-        private readonly IDbContext _dbContext;
-        private readonly IDataProvider _dataProvider;
-        private readonly CommonSettings _commonSettings;
-        
-        #endregion
-        
-        #region Ctor
+    #endregion
 
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="logRepository">Log repository</param>
-        /// <param name="webHelper">Web helper</param>
-        /// <param name="dbContext">DB context</param>
-        /// <param name="dataProvider">WeData provider</param>
-        /// <param name="commonSettings">Common settings</param>
-        public DefaultLogger(IRepository<Log> logRepository, 
-            IWebHelper webHelper,
-            IDbContext dbContext, 
-            IDataProvider dataProvider, 
-            CommonSettings commonSettings)
+    #region Utilities
+
+    /// <summary>
+    /// Gets a value indicating whether this message should not be logged
+    /// </summary>
+    /// <param name="message">Message</param>
+    /// <returns>Result</returns>
+    protected virtual bool IgnoreLog(string message)
+    {
+        if (!_commonSettings.IgnoreLogWordlist.Any())
+            return false;
+
+        if (string.IsNullOrWhiteSpace(message))
+            return false;
+
+        return _commonSettings
+            .IgnoreLogWordlist
+            .Any(x => message.Contains(x, StringComparison.InvariantCultureIgnoreCase));
+    }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Determines whether a log level is enabled
+    /// </summary>
+    /// <param name="level">Log level</param>
+    /// <returns>Result</returns>
+    public virtual bool IsEnabled(LogLevel level)
+    {
+        return level switch
         {
-            this._logRepository = logRepository;
-            this._webHelper = webHelper;
-            this._dbContext = dbContext;
-            this._dataProvider = dataProvider;
-            this._commonSettings = commonSettings;
-        }
+            LogLevel.Debug => false,
+            _ => true,
+        };
+    }
 
-        #endregion
+    /// <summary>
+    /// Deletes a log item
+    /// </summary>
+    /// <param name="log">Log item</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteLogAsync(Log log)
+    {
+        ArgumentNullException.ThrowIfNull(log);
 
-        #region Utitilities
+        await _logRepository.DeleteAsync(log, false);
+    }
 
-        /// <summary>
-        /// Gets a value indicating whether this message should not be logged
-        /// </summary>
-        /// <param name="message">Message</param>
-        /// <returns>Result</returns>
-        protected virtual bool IgnoreLog(string message)
+    /// <summary>
+    /// Deletes a log items
+    /// </summary>
+    /// <param name="logs">Log items</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteLogsAsync(IList<Log> logs)
+    {
+        await _logRepository.DeleteAsync(logs, false);
+    }
+
+    /// <summary>
+    /// Clears a log
+    /// </summary>
+    /// <param name="olderThan">The date that sets the restriction on deleting records. Leave null to remove all records</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task ClearLogAsync(DateTime? olderThan = null)
+    {
+        if (olderThan == null)
+            await _logRepository.TruncateAsync();
+        else
+            await _logRepository.DeleteAsync(p => p.CreatedOnUtc < olderThan.Value);
+    }
+
+    /// <summary>
+    /// Gets all log items
+    /// </summary>
+    /// <param name="fromUtc">Log item creation from; null to load all records</param>
+    /// <param name="toUtc">Log item creation to; null to load all records</param>
+    /// <param name="message">Message</param>
+    /// <param name="logLevel">Log level; null to load all records</param>
+    /// <param name="pageIndex">Page index</param>
+    /// <param name="pageSize">Page size</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the log item items
+    /// </returns>
+    public virtual async Task<IPagedList<Log>> GetAllLogsAsync(DateTime? fromUtc = null, DateTime? toUtc = null,
+        string message = "", LogLevel? logLevel = null,
+        int pageIndex = 0, int pageSize = int.MaxValue)
+    {
+        var logs = await _logRepository.GetAllPagedAsync(query =>
         {
-            if (_commonSettings.IgnoreLogWordlist.Count == 0)
-                return false;
-
-            if (String.IsNullOrWhiteSpace(message))
-                return false;
-
-            return _commonSettings
-                .IgnoreLogWordlist
-                .Any(x => message.IndexOf(x, StringComparison.InvariantCultureIgnoreCase) >= 0);
-        }
-
-        #endregion
-
-        #region Methods
-
-        /// <summary>
-        /// Determines whether a log level is enabled
-        /// </summary>
-        /// <param name="level">Log level</param>
-        /// <returns>Result</returns>
-        public virtual bool IsEnabled(LogLevel level)
-        {
-            switch(level)
-            {
-                case LogLevel.Debug:
-                    return false;
-                default:
-                    return true;
-            }
-        }
-
-        /// <summary>
-        /// Deletes a log item
-        /// </summary>
-        /// <param name="log">Log item</param>
-        public virtual void DeleteLog(Log log)
-        {
-            if (log == null)
-                throw new ArgumentNullException("log");
-
-            _logRepository.Delete(log);
-        }
-
-        /// <summary>
-        /// Clears a log
-        /// </summary>
-        public virtual void ClearLog()
-        {
-            if (_commonSettings.UseStoredProceduresIfSupported && _dataProvider.StoredProceduredSupported)
-            {
-                //although it's not a stored procedure we use it to ensure that a database supports them
-                //we cannot wait until EF team has it implemented - http://data.uservoice.com/forums/72025-entity-framework-feature-suggestions/suggestions/1015357-batch-cud-support
-
-
-                //do all databases support "Truncate command"?
-                string logTableName = _dbContext.GetTableName<Log>();
-                _dbContext.ExecuteSqlCommand(String.Format("TRUNCATE TABLE [{0}]", logTableName));
-            }
-            else
-            {
-                var log = _logRepository.Table.ToList();
-                foreach (var logItem in log)
-                    _logRepository.Delete(logItem);
-            }
-        }
-
-        /// <summary>
-        /// Gets all log items
-        /// </summary>
-        /// <param name="fromUtc">Log item creation from; null to load all records</param>
-        /// <param name="toUtc">Log item creation to; null to load all records</param>
-        /// <param name="message">Message</param>
-        /// <param name="logLevel">Log level; null to load all records</param>
-        /// <param name="pageIndex">Page index</param>
-        /// <param name="pageSize">Page size</param>
-        /// <returns>Log item collection</returns>
-        public virtual IPagedList<Log> GetAllLogs(DateTime? fromUtc, DateTime? toUtc,
-            string message, LogLevel? logLevel, int pageIndex, int pageSize)
-        {
-            var query = _logRepository.Table;
             if (fromUtc.HasValue)
                 query = query.Where(l => fromUtc.Value <= l.CreatedOnUtc);
             if (toUtc.HasValue)
@@ -148,83 +134,208 @@ namespace Nop.Services.Logging
                 var logLevelId = (int)logLevel.Value;
                 query = query.Where(l => logLevelId == l.LogLevelId);
             }
-             if (!String.IsNullOrEmpty(message))
+
+            if (!string.IsNullOrEmpty(message))
                 query = query.Where(l => l.ShortMessage.Contains(message) || l.FullMessage.Contains(message));
             query = query.OrderByDescending(l => l.CreatedOnUtc);
 
-            var log = new PagedList<Log>(query, pageIndex, pageSize);
-            return log;
-        }
+            return query;
+        }, pageIndex, pageSize);
 
-        /// <summary>
-        /// Gets a log item
-        /// </summary>
-        /// <param name="logId">Log item identifier</param>
-        /// <returns>Log item</returns>
-        public virtual Log GetLogById(int logId)
-        {
-            if (logId == 0)
-                return null;
-
-            return _logRepository.GetById(logId);
-        }
-
-        /// <summary>
-        /// Get log items by identifiers
-        /// </summary>
-        /// <param name="logIds">Log item identifiers</param>
-        /// <returns>Log items</returns>
-        public virtual IList<Log> GetLogByIds(int[] logIds)
-        {
-            if (logIds == null || logIds.Length == 0)
-                return new List<Log>();
-
-            var query = from l in _logRepository.Table
-                        where logIds.Contains(l.Id)
-                        select l;
-            var logItems = query.ToList();
-            //sort by passed identifiers
-            var sortedLogItems = new List<Log>();
-            foreach (int id in logIds)
-            {
-                var log = logItems.Find(x => x.Id == id);
-                if (log != null)
-                    sortedLogItems.Add(log);
-            }
-            return sortedLogItems;
-        }
-
-        /// <summary>
-        /// Inserts a log item
-        /// </summary>
-        /// <param name="logLevel">Log level</param>
-        /// <param name="shortMessage">The short message</param>
-        /// <param name="fullMessage">The full message</param>
-        /// <param name="customer">The customer to associate log record with</param>
-        /// <returns>A log item</returns>
-        public virtual Log InsertLog(LogLevel logLevel, string shortMessage, string fullMessage = "", Customer customer = null)
-        {
-            //check ignore word/phrase list?
-            if (IgnoreLog(shortMessage) || IgnoreLog(fullMessage))
-                return null;
-
-            var log = new Log
-            {
-                LogLevel = logLevel,
-                ShortMessage = shortMessage,
-                FullMessage = fullMessage,
-                IpAddress = _webHelper.GetCurrentIpAddress(),
-                Customer = customer,
-                PageUrl = _webHelper.GetThisPageUrl(true),
-                ReferrerUrl = _webHelper.GetUrlReferrer(),
-                CreatedOnUtc = DateTime.UtcNow
-            };
-
-            _logRepository.Insert(log);
-
-            return log;
-        }
-
-        #endregion
+        return logs;
     }
+
+    /// <summary>
+    /// Gets a log item
+    /// </summary>
+    /// <param name="logId">Log item identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the log item
+    /// </returns>
+    public virtual async Task<Log> GetLogByIdAsync(int logId)
+    {
+        return await _logRepository.GetByIdAsync(logId);
+    }
+
+    /// <summary>
+    /// Get log items by identifiers
+    /// </summary>
+    /// <param name="logIds">Log item identifiers</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the log items
+    /// </returns>
+    public virtual async Task<IList<Log>> GetLogByIdsAsync(int[] logIds)
+    {
+        return await _logRepository.GetByIdsAsync(logIds);
+    }
+
+    /// <summary>
+    /// Inserts a log item
+    /// </summary>
+    /// <param name="logLevel">Log level</param>
+    /// <param name="shortMessage">The short message</param>
+    /// <param name="fullMessage">The full message</param>
+    /// <param name="customer">The customer to associate log record with</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains a log item
+    /// </returns>
+    public virtual async Task<Log> InsertLogAsync(LogLevel logLevel, string shortMessage, string fullMessage = "", Customer customer = null)
+    {
+        //check ignore word/phrase list?
+        if (IgnoreLog(shortMessage) || IgnoreLog(fullMessage))
+            return null;
+
+        var log = new Log
+        {
+            LogLevel = logLevel,
+            ShortMessage = shortMessage,
+            FullMessage = fullMessage,
+            IpAddress = _webHelper.GetCurrentIpAddress(),
+            CustomerId = customer?.Id,
+            PageUrl = _webHelper.GetThisPageUrl(true),
+            ReferrerUrl = _webHelper.GetUrlReferrer(),
+            CreatedOnUtc = DateTime.UtcNow
+        };
+
+        await _logRepository.InsertAsync(log, false);
+
+        return log;
+    }
+
+    /// <summary>
+    /// Inserts a log item
+    /// </summary>
+    /// <param name="logLevel">Log level</param>
+    /// <param name="shortMessage">The short message</param>
+    /// <param name="fullMessage">The full message</param>
+    /// <param name="customer">The customer to associate log record with</param>
+    /// <returns>
+    /// Log item
+    /// </returns>
+    public virtual Log InsertLog(LogLevel logLevel, string shortMessage, string fullMessage = "", Customer customer = null)
+    {
+        //check ignore word/phrase list?
+        if (IgnoreLog(shortMessage) || IgnoreLog(fullMessage))
+            return null;
+
+        var log = new Log
+        {
+            LogLevel = logLevel,
+            ShortMessage = shortMessage,
+            FullMessage = fullMessage,
+            IpAddress = _webHelper.GetCurrentIpAddress(),
+            CustomerId = customer?.Id,
+            PageUrl = _webHelper.GetThisPageUrl(true),
+            ReferrerUrl = _webHelper.GetUrlReferrer(),
+            CreatedOnUtc = DateTime.UtcNow
+        };
+
+        _logRepository.Insert(log, false);
+
+        return log;
+    }
+
+    /// <summary>
+    /// Information
+    /// </summary>
+    /// <param name="message">Message</param>
+    /// <param name="exception">Exception</param>
+    /// <param name="customer">Customer</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InformationAsync(string message, Exception exception = null, Customer customer = null)
+    {
+        //don't log thread abort exception
+        if (exception is System.Threading.ThreadAbortException)
+            return;
+
+        if (IsEnabled(LogLevel.Information))
+            await InsertLogAsync(LogLevel.Information, message, exception?.ToString() ?? string.Empty, customer);
+    }
+
+    /// <summary>
+    /// Information
+    /// </summary>
+    /// <param name="message">Message</param>
+    /// <param name="exception">Exception</param>
+    /// <param name="customer">Customer</param>
+    public virtual void Information(string message, Exception exception = null, Customer customer = null)
+    {
+        //don't log thread abort exception
+        if (exception is System.Threading.ThreadAbortException)
+            return;
+
+        if (IsEnabled(LogLevel.Information))
+            InsertLog(LogLevel.Information, message, exception?.ToString() ?? string.Empty, customer);
+    }
+
+    /// <summary>
+    /// Warning
+    /// </summary>
+    /// <param name="message">Message</param>
+    /// <param name="exception">Exception</param>
+    /// <param name="customer">Customer</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task WarningAsync(string message, Exception exception = null, Customer customer = null)
+    {
+        //don't log thread abort exception
+        if (exception is System.Threading.ThreadAbortException)
+            return;
+
+        if (IsEnabled(LogLevel.Warning))
+            await InsertLogAsync(LogLevel.Warning, message, exception?.ToString() ?? string.Empty, customer);
+    }
+
+    /// <summary>
+    /// Warning
+    /// </summary>
+    /// <param name="message">Message</param>
+    /// <param name="exception">Exception</param>
+    /// <param name="customer">Customer</param>
+    public virtual void Warning(string message, Exception exception = null, Customer customer = null)
+    {
+        //don't log thread abort exception
+        if (exception is System.Threading.ThreadAbortException)
+            return;
+
+        if (IsEnabled(LogLevel.Warning))
+            InsertLog(LogLevel.Warning, message, exception?.ToString() ?? string.Empty, customer);
+    }
+
+    /// <summary>
+    /// Error
+    /// </summary>
+    /// <param name="message">Message</param>
+    /// <param name="exception">Exception</param>
+    /// <param name="customer">Customer</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task ErrorAsync(string message, Exception exception = null, Customer customer = null)
+    {
+        //don't log thread abort exception
+        if (exception is System.Threading.ThreadAbortException)
+            return;
+
+        if (IsEnabled(LogLevel.Error))
+            await InsertLogAsync(LogLevel.Error, message, exception?.ToString() ?? string.Empty, customer);
+    }
+
+    /// <summary>
+    /// Error
+    /// </summary>
+    /// <param name="message">Message</param>
+    /// <param name="exception">Exception</param>
+    /// <param name="customer">Customer</param>
+    public virtual void Error(string message, Exception exception = null, Customer customer = null)
+    {
+        //don't log thread abort exception
+        if (exception is System.Threading.ThreadAbortException)
+            return;
+
+        if (IsEnabled(LogLevel.Error))
+            InsertLog(LogLevel.Error, message, exception?.ToString() ?? string.Empty, customer);
+    }
+
+    #endregion
 }

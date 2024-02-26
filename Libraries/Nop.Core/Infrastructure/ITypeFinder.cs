@@ -1,23 +1,39 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Reflection;
+﻿using System.Reflection;
 
-namespace Nop.Core.Infrastructure
+namespace Nop.Core.Infrastructure;
+
+/// <summary>
+/// Classes implementing this interface provide information about types 
+/// to various services in the Nop engine.
+/// </summary>
+public partial interface ITypeFinder
 {
     /// <summary>
-    /// Classes implementing this interface provide information about types 
-    /// to various services in the Nop engine.
+    /// Find classes of type
     /// </summary>
-    public interface ITypeFinder
-    {
-        IList<Assembly> GetAssemblies();
+    /// <typeparam name="T">Type</typeparam>
+    /// <param name="onlyConcreteClasses">A value indicating whether to find only concrete classes</param>
+    /// <returns>Result</returns>
+    IEnumerable<Type> FindClassesOfType<T>(bool onlyConcreteClasses = true);
 
-        IEnumerable<Type> FindClassesOfType(Type assignTypeFrom, bool onlyConcreteClasses = true);
+    /// <summary>
+    /// Find classes of type
+    /// </summary>
+    /// <param name="assignTypeFrom">Assign type from</param>
+    /// <param name="onlyConcreteClasses">A value indicating whether to find only concrete classes</param>
+    /// <returns>Result</returns>
+    /// <returns></returns>
+    IEnumerable<Type> FindClassesOfType(Type assignTypeFrom, bool onlyConcreteClasses = true);
 
-        IEnumerable<Type> FindClassesOfType(Type assignTypeFrom, IEnumerable<Assembly> assemblies, bool onlyConcreteClasses = true);
+    /// <summary>
+    /// Gets the assemblies related to the current implementation.
+    /// </summary>
+    /// <returns>A list of assemblies</returns>
+    IList<Assembly> GetAssemblies();
 
-        IEnumerable<Type> FindClassesOfType<T>(bool onlyConcreteClasses = true);
-
-        IEnumerable<Type> FindClassesOfType<T>(IEnumerable<Assembly> assemblies, bool onlyConcreteClasses = true);
-    }
+    /// <summary>
+    /// Gets the assembly by it full name
+    /// </summary>
+    /// <returns>A list of assemblies</returns>
+    Assembly GetAssemblyByName(string assemblyFullName);
 }

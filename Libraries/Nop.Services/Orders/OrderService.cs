@@ -1,595 +1,977 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Globalization;
 using Nop.Core;
-using Nop.Core.Data;
 using Nop.Core.Domain.Catalog;
+using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Orders;
 using Nop.Core.Domain.Payments;
 using Nop.Core.Domain.Shipping;
-using Nop.Services.Events;
+using Nop.Data;
+using Nop.Services.Catalog;
+using Nop.Services.Html;
+using Nop.Services.Shipping;
 
-namespace Nop.Services.Orders
+namespace Nop.Services.Orders;
+
+/// <summary>
+/// Order service
+/// </summary>
+public partial class OrderService : IOrderService
 {
-    /// <summary>
-    /// Order service
-    /// </summary>
-    public partial class OrderService : IOrderService
+    #region Fields
+
+    protected readonly IHtmlFormatter _htmlFormatter;
+    protected readonly IProductService _productService;
+    protected readonly IRepository<Address> _addressRepository;
+    protected readonly IRepository<Customer> _customerRepository;
+    protected readonly IRepository<Order> _orderRepository;
+    protected readonly IRepository<OrderItem> _orderItemRepository;
+    protected readonly IRepository<OrderNote> _orderNoteRepository;
+    protected readonly IRepository<Product> _productRepository;
+    protected readonly IRepository<ProductWarehouseInventory> _productWarehouseInventoryRepository;
+    protected readonly IRepository<RecurringPayment> _recurringPaymentRepository;
+    protected readonly IRepository<RecurringPaymentHistory> _recurringPaymentHistoryRepository;
+    protected readonly IShipmentService _shipmentService;
+    private static readonly char[] _separator = [';'];
+
+    #endregion
+
+    #region Ctor
+
+    public OrderService(IHtmlFormatter htmlFormatter,
+        IProductService productService,
+        IRepository<Address> addressRepository,
+        IRepository<Customer> customerRepository,
+        IRepository<Order> orderRepository,
+        IRepository<OrderItem> orderItemRepository,
+        IRepository<OrderNote> orderNoteRepository,
+        IRepository<Product> productRepository,
+        IRepository<ProductWarehouseInventory> productWarehouseInventoryRepository,
+        IRepository<RecurringPayment> recurringPaymentRepository,
+        IRepository<RecurringPaymentHistory> recurringPaymentHistoryRepository,
+        IShipmentService shipmentService)
     {
-        #region Fields
-
-        private readonly IRepository<Order> _orderRepository;
-        private readonly IRepository<OrderItem> _orderItemRepository;
-        private readonly IRepository<OrderNote> _orderNoteRepository;
-        private readonly IRepository<Product> _productRepository;
-        private readonly IRepository<RecurringPayment> _recurringPaymentRepository;
-        private readonly IRepository<Customer> _customerRepository;
-        private readonly IRepository<ReturnRequest> _returnRequestRepository;
-        private readonly IEventPublisher _eventPublisher;
-
-        #endregion
-
-        #region Ctor
-
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="orderRepository">Order repository</param>
-        /// <param name="orderItemRepository">Order item repository</param>
-        /// <param name="orderNoteRepository">Order note repository</param>
-        /// <param name="productRepository">Product repository</param>
-        /// <param name="recurringPaymentRepository">Recurring payment repository</param>
-        /// <param name="customerRepository">Customer repository</param>
-        /// <param name="returnRequestRepository">Return request repository</param>
-        /// <param name="eventPublisher">Event published</param>
-        public OrderService(IRepository<Order> orderRepository,
-            IRepository<OrderItem> orderItemRepository,
-            IRepository<OrderNote> orderNoteRepository,
-            IRepository<Product> productRepository,
-            IRepository<RecurringPayment> recurringPaymentRepository,
-            IRepository<Customer> customerRepository, 
-            IRepository<ReturnRequest> returnRequestRepository,
-            IEventPublisher eventPublisher)
-        {
-            this._orderRepository = orderRepository;
-            this._orderItemRepository = orderItemRepository;
-            this._orderNoteRepository = orderNoteRepository;
-            this._productRepository = productRepository;
-            this._recurringPaymentRepository = recurringPaymentRepository;
-            this._customerRepository = customerRepository;
-            this._returnRequestRepository = returnRequestRepository;
-            this._eventPublisher = eventPublisher;
-        }
-
-        #endregion
-
-        #region Methods
-
-        #region Orders
-
-        /// <summary>
-        /// Gets an order
-        /// </summary>
-        /// <param name="orderId">The order identifier</param>
-        /// <returns>Order</returns>
-        public virtual Order GetOrderById(int orderId)
-        {
-            if (orderId == 0)
-                return null;
-
-            return _orderRepository.GetById(orderId);
-        }
-
-        /// <summary>
-        /// Get orders by identifiers
-        /// </summary>
-        /// <param name="orderIds">Order identifiers</param>
-        /// <returns>Order</returns>
-        public virtual IList<Order> GetOrdersByIds(int[] orderIds)
-        {
-            if (orderIds == null || orderIds.Length == 0)
-                return new List<Order>();
-
-            var query = from o in _orderRepository.Table
-                        where orderIds.Contains(o.Id)
-                        select o;
-            var orders = query.ToList();
-            //sort by passed identifiers
-            var sortedOrders = new List<Order>();
-            foreach (int id in orderIds)
-            {
-                var order = orders.Find(x => x.Id == id);
-                if (order != null)
-                    sortedOrders.Add(order);
-            }
-            return sortedOrders;
-        }
-
-        /// <summary>
-        /// Gets an order
-        /// </summary>
-        /// <param name="orderGuid">The order identifier</param>
-        /// <returns>Order</returns>
-        public virtual Order GetOrderByGuid(Guid orderGuid)
-        {
-            if (orderGuid == Guid.Empty)
-                return null;
-
-            var query = from o in _orderRepository.Table
-                        where o.OrderGuid == orderGuid
-                        select o;
-            var order = query.FirstOrDefault();
-            return order;
-        }
-
-        /// <summary>
-        /// Deletes an order
-        /// </summary>
-        /// <param name="order">The order</param>
-        public virtual void DeleteOrder(Order order)
-        {
-            if (order == null)
-                throw new ArgumentNullException("order");
-
-            order.Deleted = true;
-            UpdateOrder(order);
-        }
-
-        /// <summary>
-        /// Search orders
-        /// </summary>
-        /// <param name="storeId">Store identifier; 0 to load all orders</param>
-        /// <param name="vendorId">Vendor identifier; null to load all orders</param>
-        /// <param name="customerId">Customer identifier; 0 to load all orders</param>
-        /// <param name="productId">Product identifier which was purchased in an order; 0 to load all orders</param>
-        /// <param name="affiliateId">Affiliate identifier; 0 to load all orders</param>
-        /// <param name="warehouseId">Warehouse identifier, only orders with products from a specified warehouse will be loaded; 0 to load all orders</param>
-        /// <param name="createdFromUtc">Created date from (UTC); null to load all records</param>
-        /// <param name="createdToUtc">Created date to (UTC); null to load all records</param>
-        /// <param name="os">Order status; null to load all orders</param>
-        /// <param name="ps">Order payment status; null to load all orders</param>
-        /// <param name="ss">Order shipment status; null to load all orders</param>
-        /// <param name="billingEmail">Billing email. Leave empty to load all records.</param>
-        /// <param name="orderGuid">Search by order GUID (Global unique identifier) or part of GUID. Leave empty to load all orders.</param>
-        /// <param name="pageIndex">Page index</param>
-        /// <param name="pageSize">Page size</param>
-        /// <returns>Order collection</returns>
-        public virtual IPagedList<Order> SearchOrders(int storeId = 0,
-            int vendorId = 0, int customerId = 0,
-            int productId = 0, int affiliateId = 0, int warehouseId = 0,
-            DateTime? createdFromUtc = null, DateTime? createdToUtc = null,
-            OrderStatus? os = null, PaymentStatus? ps = null, ShippingStatus? ss = null,
-            string billingEmail  = null, string orderGuid = null,
-            int pageIndex = 0, int pageSize = int.MaxValue)
-        {
-            int? orderStatusId = null;
-            if (os.HasValue)
-                orderStatusId = (int)os.Value;
-
-            int? paymentStatusId = null;
-            if (ps.HasValue)
-                paymentStatusId = (int)ps.Value;
-
-            int? shippingStatusId = null;
-            if (ss.HasValue)
-                shippingStatusId = (int)ss.Value;
-
-            var query = _orderRepository.Table;
-            if (storeId > 0)
-                query = query.Where(o => o.StoreId == storeId);
-            if (vendorId > 0)
-            {
-                query = query
-                    .Where(o => o.OrderItems
-                    .Any(orderItem => orderItem.Product.VendorId == vendorId));
-            }
-            if (customerId > 0)
-                query = query.Where(o => o.CustomerId == customerId);
-            if (productId > 0)
-            {
-                query = query
-                    .Where(o => o.OrderItems
-                    .Any(orderItem => orderItem.Product.Id == productId));
-            }
-            if (warehouseId > 0)
-            {
-                var manageStockInventoryMethodId = (int)ManageInventoryMethod.ManageStock;
-                query = query
-                    .Where(o => o.OrderItems
-                    .Any(orderItem =>
-                        //"Use multiple warehouses" enabled
-                        //we search in each warehouse
-                        (orderItem.Product.ManageInventoryMethodId == manageStockInventoryMethodId && 
-                        orderItem.Product.UseMultipleWarehouses &&
-                        orderItem.Product.ProductWarehouseInventory.Any(pwi => pwi.WarehouseId == warehouseId))
-                        ||
-                        //"Use multiple warehouses" disabled
-                        //we use standard "warehouse" property
-                        ((orderItem.Product.ManageInventoryMethodId != manageStockInventoryMethodId ||
-                        !orderItem.Product.UseMultipleWarehouses) &&
-                        orderItem.Product.WarehouseId == warehouseId))
-                        );
-            }
-            if (affiliateId > 0)
-                query = query.Where(o => o.AffiliateId == affiliateId);
-            if (createdFromUtc.HasValue)
-                query = query.Where(o => createdFromUtc.Value <= o.CreatedOnUtc);
-            if (createdToUtc.HasValue)
-                query = query.Where(o => createdToUtc.Value >= o.CreatedOnUtc);
-            if (orderStatusId.HasValue)
-                query = query.Where(o => orderStatusId.Value == o.OrderStatusId);
-            if (paymentStatusId.HasValue)
-                query = query.Where(o => paymentStatusId.Value == o.PaymentStatusId);
-            if (shippingStatusId.HasValue)
-                query = query.Where(o => shippingStatusId.Value == o.ShippingStatusId);
-            if (!String.IsNullOrEmpty(billingEmail))
-                query = query.Where(o => o.BillingAddress != null && !String.IsNullOrEmpty(o.BillingAddress.Email) && o.BillingAddress.Email.Contains(billingEmail));
-            query = query.Where(o => !o.Deleted);
-            query = query.OrderByDescending(o => o.CreatedOnUtc);
-
-            
-           
-            if (!String.IsNullOrEmpty(orderGuid))
-            {
-                //filter by GUID. Filter in BLL because EF doesn't support casting of GUID to string
-                var orders = query.ToList();
-                orders = orders.FindAll(o => o.OrderGuid.ToString().ToLowerInvariant().Contains(orderGuid.ToLowerInvariant()));
-                return new PagedList<Order>(orders, pageIndex, pageSize);
-            }
-            
-            //database layer paging
-            return new PagedList<Order>(query, pageIndex, pageSize);
-        }
-
-        /// <summary>
-        /// Inserts an order
-        /// </summary>
-        /// <param name="order">Order</param>
-        public virtual void InsertOrder(Order order)
-        {
-            if (order == null)
-                throw new ArgumentNullException("order");
-
-            _orderRepository.Insert(order);
-
-            //event notification
-            _eventPublisher.EntityInserted(order);
-        }
-
-        /// <summary>
-        /// Updates the order
-        /// </summary>
-        /// <param name="order">The order</param>
-        public virtual void UpdateOrder(Order order)
-        {
-            if (order == null)
-                throw new ArgumentNullException("order");
-
-            _orderRepository.Update(order);
-
-            //event notification
-            _eventPublisher.EntityUpdated(order);
-        }
-
-        /// <summary>
-        /// Get an order by authorization transaction ID and payment method system name
-        /// </summary>
-        /// <param name="authorizationTransactionId">Authorization transaction ID</param>
-        /// <param name="paymentMethodSystemName">Payment method system name</param>
-        /// <returns>Order</returns>
-        public virtual Order GetOrderByAuthorizationTransactionIdAndPaymentMethod(string authorizationTransactionId, 
-            string paymentMethodSystemName)
-        { 
-            var query = _orderRepository.Table;
-            if (!String.IsNullOrWhiteSpace(authorizationTransactionId))
-                query = query.Where(o => o.AuthorizationTransactionId == authorizationTransactionId);
-            
-            if (!String.IsNullOrWhiteSpace(paymentMethodSystemName))
-                query = query.Where(o => o.PaymentMethodSystemName == paymentMethodSystemName);
-            
-            query = query.OrderByDescending(o => o.CreatedOnUtc);
-            var order = query.FirstOrDefault();
-            return order;
-        }
-        
-        #endregion
-        
-        #region Orders items
-
-        /// <summary>
-        /// Gets an order item
-        /// </summary>
-        /// <param name="orderItemId">Order item identifier</param>
-        /// <returns>Order item</returns>
-        public virtual OrderItem GetOrderItemById(int orderItemId)
-        {
-            if (orderItemId == 0)
-                return null;
-
-            return _orderItemRepository.GetById(orderItemId);
-        }
-
-        /// <summary>
-        /// Gets an item
-        /// </summary>
-        /// <param name="orderItemGuid">Order identifier</param>
-        /// <returns>Order item</returns>
-        public virtual OrderItem GetOrderItemByGuid(Guid orderItemGuid)
-        {
-            if (orderItemGuid == Guid.Empty)
-                return null;
-
-            var query = from orderItem in _orderItemRepository.Table
-                        where orderItem.OrderItemGuid == orderItemGuid
-                        select orderItem;
-            var item = query.FirstOrDefault();
-            return item;
-        }
-        
-        /// <summary>
-        /// Gets all order items
-        /// </summary>
-        /// <param name="orderId">Order identifier; null to load all records</param>
-        /// <param name="customerId">Customer identifier; null to load all records</param>
-        /// <param name="createdFromUtc">Order created date from (UTC); null to load all records</param>
-        /// <param name="createdToUtc">Order created date to (UTC); null to load all records</param>
-        /// <param name="os">Order status; null to load all records</param>
-        /// <param name="ps">Order payment status; null to load all records</param>
-        /// <param name="ss">Order shipment status; null to load all records</param>
-        /// <param name="loadDownloableProductsOnly">Value indicating whether to load downloadable products only</param>
-        /// <returns>Order collection</returns>
-        public virtual IList<OrderItem> GetAllOrderItems(int? orderId,
-            int? customerId, DateTime? createdFromUtc, DateTime? createdToUtc, 
-            OrderStatus? os, PaymentStatus? ps, ShippingStatus? ss,
-            bool loadDownloableProductsOnly)
-        {
-            int? orderStatusId = null;
-            if (os.HasValue)
-                orderStatusId = (int)os.Value;
-
-            int? paymentStatusId = null;
-            if (ps.HasValue)
-                paymentStatusId = (int)ps.Value;
-
-            int? shippingStatusId = null;
-            if (ss.HasValue)
-                shippingStatusId = (int)ss.Value;
-
-
-            var query = from orderItem in _orderItemRepository.Table
-                        join o in _orderRepository.Table on orderItem.OrderId equals o.Id
-                        join p in _productRepository.Table on orderItem.ProductId equals p.Id
-                        where (!orderId.HasValue || orderId.Value == 0 || orderId == o.Id) &&
-                        (!customerId.HasValue || customerId.Value == 0 || customerId == o.CustomerId) &&
-                        (!createdFromUtc.HasValue || createdFromUtc.Value <= o.CreatedOnUtc) &&
-                        (!createdToUtc.HasValue || createdToUtc.Value >= o.CreatedOnUtc) &&
-                        (!orderStatusId.HasValue || orderStatusId == o.OrderStatusId) &&
-                        (!paymentStatusId.HasValue || paymentStatusId.Value == o.PaymentStatusId) &&
-                        (!shippingStatusId.HasValue || shippingStatusId.Value == o.ShippingStatusId) &&
-                        (!loadDownloableProductsOnly || p.IsDownload) &&
-                        !o.Deleted
-                        orderby o.CreatedOnUtc descending, orderItem.Id
-                        select orderItem;
-
-            var orderItems = query.ToList();
-            return orderItems;
-        }
-
-        /// <summary>
-        /// Delete an order item
-        /// </summary>
-        /// <param name="orderItem">The order item</param>
-        public virtual void DeleteOrderItem(OrderItem orderItem)
-        {
-            if (orderItem == null)
-                throw new ArgumentNullException("orderItem");
-
-            _orderItemRepository.Delete(orderItem);
-
-            //event notification
-            _eventPublisher.EntityDeleted(orderItem);
-        }
-
-        #endregion
-
-        #region Orders
-
-        /// <summary>
-        /// Gets an order note
-        /// </summary>
-        /// <param name="orderNoteId">The order note identifier</param>
-        /// <returns>Order note</returns>
-        public virtual OrderNote GetOrderNoteById(int orderNoteId)
-        {
-            if (orderNoteId == 0)
-                return null;
-
-            return _orderNoteRepository.GetById(orderNoteId);
-        }
-
-        /// <summary>
-        /// Deletes an order note
-        /// </summary>
-        /// <param name="orderNote">The order note</param>
-        public virtual void DeleteOrderNote(OrderNote orderNote)
-        {
-            if (orderNote == null)
-                throw new ArgumentNullException("orderNote");
-
-            _orderNoteRepository.Delete(orderNote);
-
-            //event notification
-            _eventPublisher.EntityDeleted(orderNote);
-        }
-
-        #endregion
-
-        #region Recurring payments
-
-        /// <summary>
-        /// Deletes a recurring payment
-        /// </summary>
-        /// <param name="recurringPayment">Recurring payment</param>
-        public virtual void DeleteRecurringPayment(RecurringPayment recurringPayment)
-        {
-            if (recurringPayment == null)
-                throw new ArgumentNullException("recurringPayment");
-
-            recurringPayment.Deleted = true;
-            UpdateRecurringPayment(recurringPayment);
-        }
-
-        /// <summary>
-        /// Gets a recurring payment
-        /// </summary>
-        /// <param name="recurringPaymentId">The recurring payment identifier</param>
-        /// <returns>Recurring payment</returns>
-        public virtual RecurringPayment GetRecurringPaymentById(int recurringPaymentId)
-        {
-            if (recurringPaymentId == 0)
-                return null;
-
-           return _recurringPaymentRepository.GetById(recurringPaymentId);
-        }
-
-        /// <summary>
-        /// Inserts a recurring payment
-        /// </summary>
-        /// <param name="recurringPayment">Recurring payment</param>
-        public virtual void InsertRecurringPayment(RecurringPayment recurringPayment)
-        {
-            if (recurringPayment == null)
-                throw new ArgumentNullException("recurringPayment");
-
-            _recurringPaymentRepository.Insert(recurringPayment);
-
-            //event notification
-            _eventPublisher.EntityInserted(recurringPayment);
-        }
-
-        /// <summary>
-        /// Updates the recurring payment
-        /// </summary>
-        /// <param name="recurringPayment">Recurring payment</param>
-        public virtual void UpdateRecurringPayment(RecurringPayment recurringPayment)
-        {
-            if (recurringPayment == null)
-                throw new ArgumentNullException("recurringPayment");
-
-            _recurringPaymentRepository.Update(recurringPayment);
-
-            //event notification
-            _eventPublisher.EntityUpdated(recurringPayment);
-        }
-
-        /// <summary>
-        /// Search recurring payments
-        /// </summary>
-        /// <param name="storeId">The store identifier; 0 to load all records</param>
-        /// <param name="customerId">The customer identifier; 0 to load all records</param>
-        /// <param name="initialOrderId">The initial order identifier; 0 to load all records</param>
-        /// <param name="initialOrderStatus">Initial order status identifier; null to load all records</param>
-        /// <param name="pageIndex">Page index</param>
-        /// <param name="pageSize">Page size</param>
-        /// <param name="showHidden">A value indicating whether to show hidden records</param>
-        /// <returns>Recurring payment collection</returns>
-        public virtual IPagedList<RecurringPayment> SearchRecurringPayments(int storeId, 
-            int customerId, int initialOrderId, OrderStatus? initialOrderStatus, 
-            int pageIndex, int pageSize, bool showHidden = false)
-        {
-            int? initialOrderStatusId = null;
-            if (initialOrderStatus.HasValue)
-                initialOrderStatusId = (int)initialOrderStatus.Value;
-
-            var query1 = from rp in _recurringPaymentRepository.Table
-                         join c in _customerRepository.Table on rp.InitialOrder.CustomerId equals c.Id
-                         where
-                         (!rp.Deleted) &&
-                         (showHidden || !rp.InitialOrder.Deleted) &&
-                         (showHidden || !c.Deleted) &&
-                         (showHidden || rp.IsActive) &&
-                         (customerId == 0 || rp.InitialOrder.CustomerId == customerId) &&
-                         (storeId == 0 || rp.InitialOrder.StoreId == storeId) &&
-                         (initialOrderId == 0 || rp.InitialOrder.Id == initialOrderId) &&
-                         (!initialOrderStatusId.HasValue || initialOrderStatusId.Value == 0 || rp.InitialOrder.OrderStatusId == initialOrderStatusId.Value)
-                         select rp.Id;
-
-            var query2 = from rp in _recurringPaymentRepository.Table
-                         where query1.Contains(rp.Id)
-                         orderby rp.StartDateUtc, rp.Id
-                         select rp;
-
-            var recurringPayments = new PagedList<RecurringPayment>(query2, pageIndex, pageSize);
-            return recurringPayments;
-        }
-
-        #endregion
-
-        #region Return requests
-
-        /// <summary>
-        /// Deletes a return request
-        /// </summary>
-        /// <param name="returnRequest">Return request</param>
-        public virtual void DeleteReturnRequest(ReturnRequest returnRequest)
-        {
-            if (returnRequest == null)
-                throw new ArgumentNullException("returnRequest");
-
-            _returnRequestRepository.Delete(returnRequest);
-
-            //event notification
-            _eventPublisher.EntityDeleted(returnRequest);
-        }
-
-        /// <summary>
-        /// Gets a return request
-        /// </summary>
-        /// <param name="returnRequestId">Return request identifier</param>
-        /// <returns>Return request</returns>
-        public virtual ReturnRequest GetReturnRequestById(int returnRequestId)
-        {
-            if (returnRequestId == 0)
-                return null;
-
-            return _returnRequestRepository.GetById(returnRequestId);
-        }
-
-        /// <summary>
-        /// Search return requests
-        /// </summary>
-        /// <param name="storeId">Store identifier; 0 to load all entries</param>
-        /// <param name="customerId">Customer identifier; null to load all entries</param>
-        /// <param name="orderItemId">Order item identifier; 0 to load all entries</param>
-        /// <param name="rs">Return request status; null to load all entries</param>
-        /// <param name="pageIndex">Page index</param>
-        /// <param name="pageSize">Page size</param>
-        /// <returns>Return requests</returns>
-        public virtual IPagedList<ReturnRequest> SearchReturnRequests(int storeId, int customerId,
-            int orderItemId, ReturnRequestStatus? rs, int pageIndex, int pageSize)
-        {
-            var query = _returnRequestRepository.Table;
-            if (storeId > 0)
-                query = query.Where(rr => storeId == rr.StoreId);
-            if (customerId > 0)
-                query = query.Where(rr => customerId == rr.CustomerId);
-            if (rs.HasValue)
-            {
-                var returnStatusId = (int)rs.Value;
-                query = query.Where(rr => rr.ReturnRequestStatusId == returnStatusId);
-            }
-            if (orderItemId > 0)
-                query = query.Where(rr => rr.OrderItemId == orderItemId);
-
-            query = query.OrderByDescending(rr => rr.CreatedOnUtc).ThenByDescending(rr=>rr.Id);
-
-            var returnRequests = new PagedList<ReturnRequest>(query, pageIndex, pageSize);
-            return returnRequests;
-        }
-
-        #endregion
-        
-        #endregion
+        _htmlFormatter = htmlFormatter;
+        _productService = productService;
+        _addressRepository = addressRepository;
+        _customerRepository = customerRepository;
+        _orderRepository = orderRepository;
+        _orderItemRepository = orderItemRepository;
+        _orderNoteRepository = orderNoteRepository;
+        _productRepository = productRepository;
+        _productWarehouseInventoryRepository = productWarehouseInventoryRepository;
+        _recurringPaymentRepository = recurringPaymentRepository;
+        _recurringPaymentHistoryRepository = recurringPaymentHistoryRepository;
+        _shipmentService = shipmentService;
     }
+
+    #endregion
+
+    #region Utilities
+
+    /// <summary>
+    /// Gets the value indicating whether there are shipment items with a positive quantity in order shipments.
+    /// </summary>
+    /// <param name="order">Order</param>
+    /// <param name="predicate">Predicate to filter shipments or null to check all shipments</param>
+    /// <returns>The <see cref="Task"/> containing the value indicating whether there are shipment items with a positive quantity in order shipments.</returns>
+    protected virtual async Task<bool> HasShipmentItemsAsync(Order order, Func<Shipment, bool> predicate = null)
+    {
+        var shipments = await _shipmentService.GetShipmentsByOrderIdAsync(order.Id);
+        if (shipments?.Any(shipment => predicate == null || predicate(shipment)) == true)
+        {
+            var orderItems = await GetOrderItemsAsync(order.Id, isShipEnabled: true);
+            if (orderItems?.Any() == true)
+            {
+                foreach (var shipment in shipments)
+                {
+                    if (predicate?.Invoke(shipment) == false)
+                        continue;
+
+                    bool hasPositiveQuantity(ShipmentItem shipmentItem)
+                    {
+                        return orderItems.Any(orderItem => orderItem.Id == shipmentItem.OrderItemId && shipmentItem.Quantity > 0);
+                    }
+
+                    var shipmentItems = await _shipmentService.GetShipmentItemsByShipmentIdAsync(shipment.Id);
+                    if (shipmentItems?.Any(hasPositiveQuantity) == true)
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    #endregion
+
+    #region Methods
+
+    #region Orders
+
+    /// <summary>
+    /// Gets an order
+    /// </summary>
+    /// <param name="orderId">The order identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the order
+    /// </returns>
+    public virtual async Task<Order> GetOrderByIdAsync(int orderId)
+    {
+        return await _orderRepository.GetByIdAsync(orderId, cache => default, useShortTermCache: true);
+    }
+
+    /// <summary>
+    /// Gets an order
+    /// </summary>
+    /// <param name="customOrderNumber">The custom order number</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the order
+    /// </returns>
+    public virtual async Task<Order> GetOrderByCustomOrderNumberAsync(string customOrderNumber)
+    {
+        if (string.IsNullOrEmpty(customOrderNumber))
+            return null;
+
+        return await _orderRepository.Table
+            .FirstOrDefaultAsync(o => o.CustomOrderNumber == customOrderNumber);
+    }
+
+    /// <summary>
+    /// Gets an order by order item identifier
+    /// </summary>
+    /// <param name="orderItemId">The order item identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the order
+    /// </returns>
+    public virtual async Task<Order> GetOrderByOrderItemAsync(int orderItemId)
+    {
+        if (orderItemId == 0)
+            return null;
+
+        return await (from o in _orderRepository.Table
+            join oi in _orderItemRepository.Table on o.Id equals oi.OrderId
+            where oi.Id == orderItemId
+            select o).FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Get orders by identifiers
+    /// </summary>
+    /// <param name="orderIds">Order identifiers</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the order
+    /// </returns>
+    public virtual async Task<IList<Order>> GetOrdersByIdsAsync(int[] orderIds)
+    {
+        return await _orderRepository.GetByIdsAsync(orderIds, includeDeleted: false);
+    }
+
+    /// <summary>
+    /// Get orders by guids
+    /// </summary>
+    /// <param name="orderGuids">Order guids</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the orders
+    /// </returns>
+    public virtual async Task<IList<Order>> GetOrdersByGuidsAsync(Guid[] orderGuids)
+    {
+        if (orderGuids == null)
+            return null;
+
+        var query = from o in _orderRepository.Table
+            where orderGuids.Contains(o.OrderGuid)
+            select o;
+        var orders = await query.ToListAsync();
+
+        return orders;
+    }
+
+    /// <summary>
+    /// Gets an order
+    /// </summary>
+    /// <param name="orderGuid">The order identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the order
+    /// </returns>
+    public virtual async Task<Order> GetOrderByGuidAsync(Guid orderGuid)
+    {
+        if (orderGuid == Guid.Empty)
+            return null;
+
+        var query = from o in _orderRepository.Table
+            where o.OrderGuid == orderGuid
+            select o;
+        var order = await query.FirstOrDefaultAsync();
+
+        return order;
+    }
+
+    /// <summary>
+    /// Deletes an order
+    /// </summary>
+    /// <param name="order">The order</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteOrderAsync(Order order)
+    {
+        await _orderRepository.DeleteAsync(order);
+    }
+
+    /// <summary>
+    /// Search orders
+    /// </summary>
+    /// <param name="storeId">Store identifier; 0 to load all orders</param>
+    /// <param name="vendorId">Vendor identifier; null to load all orders</param>
+    /// <param name="customerId">Customer identifier; 0 to load all orders</param>
+    /// <param name="productId">Product identifier which was purchased in an order; 0 to load all orders</param>
+    /// <param name="affiliateId">Affiliate identifier; 0 to load all orders</param>
+    /// <param name="billingCountryId">Billing country identifier; 0 to load all orders</param>
+    /// <param name="warehouseId">Warehouse identifier, only orders with products from a specified warehouse will be loaded; 0 to load all orders</param>
+    /// <param name="paymentMethodSystemName">Payment method system name; null to load all records</param>
+    /// <param name="createdFromUtc">Created date from (UTC); null to load all records</param>
+    /// <param name="createdToUtc">Created date to (UTC); null to load all records</param>
+    /// <param name="osIds">Order status identifiers; null to load all orders</param>
+    /// <param name="psIds">Payment status identifiers; null to load all orders</param>
+    /// <param name="ssIds">Shipping status identifiers; null to load all orders</param>
+    /// <param name="billingPhone">Billing phone. Leave empty to load all records.</param>
+    /// <param name="billingEmail">Billing email. Leave empty to load all records.</param>
+    /// <param name="billingLastName">Billing last name. Leave empty to load all records.</param>
+    /// <param name="orderNotes">Search in order notes. Leave empty to load all records.</param>
+    /// <param name="pageIndex">Page index</param>
+    /// <param name="pageSize">Page size</param>
+    /// <param name="getOnlyTotalCount">A value in indicating whether you want to load only total number of records. Set to "true" if you don't want to load data from database</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the orders
+    /// </returns>
+    public virtual async Task<IPagedList<Order>> SearchOrdersAsync(int storeId = 0,
+        int vendorId = 0, int customerId = 0,
+        int productId = 0, int affiliateId = 0, int warehouseId = 0,
+        int billingCountryId = 0, string paymentMethodSystemName = null,
+        DateTime? createdFromUtc = null, DateTime? createdToUtc = null,
+        List<int> osIds = null, List<int> psIds = null, List<int> ssIds = null,
+        string billingPhone = null, string billingEmail = null, string billingLastName = "",
+        string orderNotes = null, int pageIndex = 0, int pageSize = int.MaxValue, bool getOnlyTotalCount = false)
+    {
+        var query = _orderRepository.Table;
+
+        if (storeId > 0)
+            query = query.Where(o => o.StoreId == storeId);
+
+        if (vendorId > 0)
+        {
+            query = from o in query
+                join oi in _orderItemRepository.Table on o.Id equals oi.OrderId
+                join p in _productRepository.Table on oi.ProductId equals p.Id
+                where p.VendorId == vendorId
+                select o;
+
+            query = query.Distinct();
+        }
+
+        if (customerId > 0)
+            query = query.Where(o => o.CustomerId == customerId);
+
+        if (productId > 0)
+        {
+            query = from o in query
+                join oi in _orderItemRepository.Table on o.Id equals oi.OrderId
+                where oi.ProductId == productId
+                select o;
+
+            query = query.Distinct();
+        }
+
+        if (warehouseId > 0)
+        {
+            var manageStockInventoryMethodId = (int)ManageInventoryMethod.ManageStock;
+
+            query = from o in query
+                join oi in _orderItemRepository.Table on o.Id equals oi.OrderId
+                join p in _productRepository.Table on oi.ProductId equals p.Id
+                join pwi in _productWarehouseInventoryRepository.Table on p.Id equals pwi.ProductId into ps
+                from pwi in ps.DefaultIfEmpty()
+                where
+                    //"Use multiple warehouses" enabled
+                    //we search in each warehouse
+                    (p.ManageInventoryMethodId == manageStockInventoryMethodId && p.UseMultipleWarehouses && pwi.WarehouseId == warehouseId) ||
+                    //"Use multiple warehouses" disabled
+                    //we use standard "warehouse" property
+                    ((p.ManageInventoryMethodId != manageStockInventoryMethodId || !p.UseMultipleWarehouses) && p.WarehouseId == warehouseId)
+                select o;
+
+            query = query.Distinct();
+        }
+
+        if (!string.IsNullOrEmpty(paymentMethodSystemName))
+            query = query.Where(o => o.PaymentMethodSystemName == paymentMethodSystemName);
+
+        if (affiliateId > 0)
+            query = query.Where(o => o.AffiliateId == affiliateId);
+
+        if (createdFromUtc.HasValue)
+            query = query.Where(o => createdFromUtc.Value <= o.CreatedOnUtc);
+
+        if (createdToUtc.HasValue)
+            query = query.Where(o => createdToUtc.Value >= o.CreatedOnUtc);
+
+        if (osIds != null && osIds.Any())
+            query = query.Where(o => osIds.Contains(o.OrderStatusId));
+
+        if (psIds != null && psIds.Any())
+            query = query.Where(o => psIds.Contains(o.PaymentStatusId));
+
+        if (ssIds != null && ssIds.Any())
+            query = query.Where(o => ssIds.Contains(o.ShippingStatusId));
+
+        if (!string.IsNullOrEmpty(orderNotes))
+            query = query.Where(o => _orderNoteRepository.Table.Any(oNote => oNote.OrderId == o.Id && oNote.Note.Contains(orderNotes)));
+
+        query = from o in query
+            join oba in _addressRepository.Table on o.BillingAddressId equals oba.Id
+            where
+                (billingCountryId <= 0 || (oba.CountryId == billingCountryId)) &&
+                (string.IsNullOrEmpty(billingPhone) || (!string.IsNullOrEmpty(oba.PhoneNumber) && oba.PhoneNumber.Contains(billingPhone))) &&
+                (string.IsNullOrEmpty(billingEmail) || (!string.IsNullOrEmpty(oba.Email) && oba.Email.Contains(billingEmail))) &&
+                (string.IsNullOrEmpty(billingLastName) || (!string.IsNullOrEmpty(oba.LastName) && oba.LastName.Contains(billingLastName)))
+            select o;
+
+        query = query.Where(o => !o.Deleted);
+        query = query.OrderByDescending(o => o.CreatedOnUtc);
+
+        //database layer paging
+        return await query.ToPagedListAsync(pageIndex, pageSize, getOnlyTotalCount);
+    }
+
+    /// <summary>
+    /// Inserts an order
+    /// </summary>
+    /// <param name="order">Order</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertOrderAsync(Order order)
+    {
+        await _orderRepository.InsertAsync(order);
+    }
+
+    /// <summary>
+    /// Updates the order
+    /// </summary>
+    /// <param name="order">The order</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task UpdateOrderAsync(Order order)
+    {
+        await _orderRepository.UpdateAsync(order);
+    }
+
+    /// <summary>
+    /// Parse tax rates
+    /// </summary>
+    /// <param name="order">Order</param>
+    /// <param name="taxRatesStr"></param>
+    /// <returns>Rates</returns>
+    public virtual SortedDictionary<decimal, decimal> ParseTaxRates(Order order, string taxRatesStr)
+    {
+        var taxRatesDictionary = new SortedDictionary<decimal, decimal>();
+
+        if (string.IsNullOrEmpty(taxRatesStr))
+            return taxRatesDictionary;
+
+        var lines = taxRatesStr.Split(_separator, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrEmpty(line.Trim()))
+                continue;
+
+            var taxes = line.Split(':');
+            if (taxes.Length != 2)
+                continue;
+
+            try
+            {
+                var taxRate = decimal.Parse(taxes[0].Trim(), CultureInfo.InvariantCulture);
+                var taxValue = decimal.Parse(taxes[1].Trim(), CultureInfo.InvariantCulture);
+                taxRatesDictionary.Add(taxRate, taxValue);
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        //add at least one tax rate (0%)
+        if (!taxRatesDictionary.Any())
+            taxRatesDictionary.Add(decimal.Zero, decimal.Zero);
+
+        return taxRatesDictionary;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether an order has items to be added to a shipment
+    /// </summary>
+    /// <param name="order">Order</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains a value indicating whether an order has items to be added to a shipment
+    /// </returns>
+    public virtual async Task<bool> HasItemsToAddToShipmentAsync(Order order)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+
+        foreach (var orderItem in await GetOrderItemsAsync(order.Id, isShipEnabled: true)) //we can ship only shippable products
+        {
+            var totalNumberOfItemsCanBeAddedToShipment = await GetTotalNumberOfItemsCanBeAddedToShipmentAsync(orderItem);
+            if (totalNumberOfItemsCanBeAddedToShipment <= 0)
+                continue;
+
+            //yes, we have at least one item to create a new shipment
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether an order has items to ship
+    /// </summary>
+    /// <param name="order">Order</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains a value indicating whether an order has items to ship
+    /// </returns>
+    public virtual async Task<bool> HasItemsToShipAsync(Order order)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+
+        if (order.PickupInStore)
+            return false;
+
+        return await HasShipmentItemsAsync(order, shipment => !shipment.ShippedDateUtc.HasValue);
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether there are shipment items to mark as 'ready for pickup' in order shipments.
+    /// </summary>
+    /// <param name="order">Order</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains a value indicating whether there are shipment items to mark as 'ready for pickup' in order shipments.
+    /// </returns>
+    public virtual async Task<bool> HasItemsToReadyForPickupAsync(Order order)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+
+        if (!order.PickupInStore)
+            return false;
+
+        return await HasShipmentItemsAsync(order, shipment => !shipment.ReadyForPickupDateUtc.HasValue);
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether an order has items to deliver
+    /// </summary>
+    /// <param name="order">Order</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains a value indicating whether an order has items to deliver
+    /// </returns>
+    public virtual async Task<bool> HasItemsToDeliverAsync(Order order)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+
+        return await HasShipmentItemsAsync(order, shipment => (shipment.ShippedDateUtc.HasValue || shipment.ReadyForPickupDateUtc.HasValue) && !shipment.DeliveryDateUtc.HasValue);
+    }
+
+    #endregion
+
+    #region Orders items
+
+    /// <summary>
+    /// Gets an order item
+    /// </summary>
+    /// <param name="orderItemId">Order item identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the order item
+    /// </returns>
+    public virtual async Task<OrderItem> GetOrderItemByIdAsync(int orderItemId)
+    {
+        return await _orderItemRepository.GetByIdAsync(orderItemId, cache => default, useShortTermCache: true);
+    }
+
+    /// <summary>
+    /// Gets a product of specify order item
+    /// </summary>
+    /// <param name="orderItemId">Order item identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the product
+    /// </returns>
+    public virtual async Task<Product> GetProductByOrderItemIdAsync(int orderItemId)
+    {
+        if (orderItemId == 0)
+            return null;
+
+        return await (from p in _productRepository.Table
+            join oi in _orderItemRepository.Table on p.Id equals oi.ProductId
+            where oi.Id == orderItemId
+            select p).SingleOrDefaultAsync();
+    }
+
+    /// <summary>
+    /// Gets a list items of order
+    /// </summary>
+    /// <param name="orderId">Order identifier</param>
+    /// <param name="isNotReturnable">Value indicating whether this product is returnable; pass null to ignore</param>
+    /// <param name="isShipEnabled">Value indicating whether the entity is ship enabled; pass null to ignore</param>
+    /// <param name="vendorId">Vendor identifier; pass 0 to ignore</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the result
+    /// </returns>
+    public virtual async Task<IList<OrderItem>> GetOrderItemsAsync(int orderId, bool? isNotReturnable = null, bool? isShipEnabled = null, int vendorId = 0)
+    {
+        if (orderId == 0)
+            return new List<OrderItem>();
+
+        return await (from oi in _orderItemRepository.Table
+            join p in _productRepository.Table on oi.ProductId equals p.Id
+            where
+                oi.OrderId == orderId &&
+                (!isShipEnabled.HasValue || (p.IsShipEnabled == isShipEnabled.Value)) &&
+                (!isNotReturnable.HasValue || (p.NotReturnable == isNotReturnable)) &&
+                (vendorId <= 0 || (p.VendorId == vendorId))
+            select oi).ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets an item
+    /// </summary>
+    /// <param name="orderItemGuid">Order identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the order item
+    /// </returns>
+    public virtual async Task<OrderItem> GetOrderItemByGuidAsync(Guid orderItemGuid)
+    {
+        if (orderItemGuid == Guid.Empty)
+            return null;
+
+        var query = from orderItem in _orderItemRepository.Table
+            where orderItem.OrderItemGuid == orderItemGuid
+            select orderItem;
+        var item = await query.FirstOrDefaultAsync();
+        return item;
+    }
+
+    /// <summary>
+    /// Gets all downloadable order items
+    /// </summary>
+    /// <param name="customerId">Customer identifier; null to load all records</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the order items
+    /// </returns>
+    public virtual async Task<IList<OrderItem>> GetDownloadableOrderItemsAsync(int customerId)
+    {
+        if (customerId == 0)
+            throw new ArgumentOutOfRangeException(nameof(customerId));
+
+        var query = from orderItem in _orderItemRepository.Table
+            join o in _orderRepository.Table on orderItem.OrderId equals o.Id
+            join p in _productRepository.Table on orderItem.ProductId equals p.Id
+            where customerId == o.CustomerId &&
+                  p.IsDownload &&
+                  !o.Deleted
+            orderby o.CreatedOnUtc descending, orderItem.Id
+            select orderItem;
+
+        var orderItems = await query.ToListAsync();
+        return orderItems;
+    }
+
+    /// <summary>
+    /// Delete an order item
+    /// </summary>
+    /// <param name="orderItem">The order item</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteOrderItemAsync(OrderItem orderItem)
+    {
+        await _orderItemRepository.DeleteAsync(orderItem);
+    }
+
+    /// <summary>
+    /// Gets a total number of items in all shipments
+    /// </summary>
+    /// <param name="orderItem">Order item</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the total number of items in all shipments
+    /// </returns>
+    public virtual async Task<int> GetTotalNumberOfItemsInAllShipmentsAsync(OrderItem orderItem)
+    {
+        ArgumentNullException.ThrowIfNull(orderItem);
+
+        var totalInShipments = 0;
+        var shipments = await _shipmentService.GetShipmentsByOrderIdAsync(orderItem.OrderId);
+
+        for (var i = 0; i < shipments.Count; i++)
+        {
+            var shipment = shipments[i];
+            var si = (await _shipmentService.GetShipmentItemsByShipmentIdAsync(shipment.Id))
+                .FirstOrDefault(x => x.OrderItemId == orderItem.Id);
+            if (si != null)
+            {
+                totalInShipments += si.Quantity;
+            }
+        }
+
+        return totalInShipments;
+    }
+
+    /// <summary>
+    /// Gets a total number of already items which can be added to new shipments
+    /// </summary>
+    /// <param name="orderItem">Order item</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the total number of already delivered items which can be added to new shipments
+    /// </returns>
+    public virtual async Task<int> GetTotalNumberOfItemsCanBeAddedToShipmentAsync(OrderItem orderItem)
+    {
+        ArgumentNullException.ThrowIfNull(orderItem);
+
+        var totalInShipments = await GetTotalNumberOfItemsInAllShipmentsAsync(orderItem);
+
+        var qtyOrdered = orderItem.Quantity;
+        var qtyCanBeAddedToShipmentTotal = qtyOrdered - totalInShipments;
+        if (qtyCanBeAddedToShipmentTotal < 0)
+            qtyCanBeAddedToShipmentTotal = 0;
+
+        return qtyCanBeAddedToShipmentTotal;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether download is allowed
+    /// </summary>
+    /// <param name="orderItem">Order item to check</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the true if download is allowed; otherwise, false.
+    /// </returns>
+    public virtual async Task<bool> IsDownloadAllowedAsync(OrderItem orderItem)
+    {
+        if (orderItem is null)
+            return false;
+
+        var order = await GetOrderByIdAsync(orderItem.OrderId);
+        if (order == null || order.Deleted)
+            return false;
+
+        //order status
+        if (order.OrderStatus == OrderStatus.Cancelled)
+            return false;
+
+        var product = await _productService.GetProductByIdAsync(orderItem.ProductId);
+
+        if (product == null || !product.IsDownload)
+            return false;
+
+        //payment status
+        switch (product.DownloadActivationType)
+        {
+            case DownloadActivationType.WhenOrderIsPaid:
+                if (order.PaymentStatus == PaymentStatus.Paid && order.PaidDateUtc.HasValue)
+                {
+                    //expiration date
+                    if (product.DownloadExpirationDays.HasValue)
+                    {
+                        if (order.PaidDateUtc.Value.AddDays(product.DownloadExpirationDays.Value) > DateTime.UtcNow)
+                        {
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        return true;
+                    }
+                }
+
+                break;
+            case DownloadActivationType.Manually:
+                if (orderItem.IsDownloadActivated)
+                {
+                    //expiration date
+                    if (product.DownloadExpirationDays.HasValue)
+                    {
+                        if (order.CreatedOnUtc.AddDays(product.DownloadExpirationDays.Value) > DateTime.UtcNow)
+                        {
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        return true;
+                    }
+                }
+
+                break;
+            default:
+                break;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether license download is allowed
+    /// </summary>
+    /// <param name="orderItem">Order item to check</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the true if license download is allowed; otherwise, false.
+    /// </returns>
+    public virtual async Task<bool> IsLicenseDownloadAllowedAsync(OrderItem orderItem)
+    {
+        if (orderItem == null)
+            return false;
+
+        return await IsDownloadAllowedAsync(orderItem) &&
+               orderItem.LicenseDownloadId.HasValue &&
+               orderItem.LicenseDownloadId > 0;
+    }
+
+    /// <summary>
+    /// Inserts a order item
+    /// </summary>
+    /// <param name="orderItem">Order item</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertOrderItemAsync(OrderItem orderItem)
+    {
+        await _orderItemRepository.InsertAsync(orderItem);
+    }
+
+    /// <summary>
+    /// Updates a order item
+    /// </summary>
+    /// <param name="orderItem">Order item</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task UpdateOrderItemAsync(OrderItem orderItem)
+    {
+        await _orderItemRepository.UpdateAsync(orderItem);
+    }
+
+    #endregion
+
+    #region Orders notes
+
+    /// <summary>
+    /// Gets an order note
+    /// </summary>
+    /// <param name="orderNoteId">The order note identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the order note
+    /// </returns>
+    public virtual async Task<OrderNote> GetOrderNoteByIdAsync(int orderNoteId)
+    {
+        return await _orderNoteRepository.GetByIdAsync(orderNoteId);
+    }
+
+    /// <summary>
+    /// Gets a list notes of order
+    /// </summary>
+    /// <param name="orderId">Order identifier</param>
+    /// <param name="displayToCustomer">Value indicating whether a customer can see a note; pass null to ignore</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the result
+    /// </returns>
+    public virtual async Task<IList<OrderNote>> GetOrderNotesByOrderIdAsync(int orderId, bool? displayToCustomer = null)
+    {
+        if (orderId == 0)
+            return new List<OrderNote>();
+
+        var query = _orderNoteRepository.Table.Where(on => on.OrderId == orderId);
+
+        if (displayToCustomer.HasValue)
+        {
+            query = query.Where(on => on.DisplayToCustomer == displayToCustomer);
+        }
+
+        return await query.ToListAsync();
+    }
+
+    /// <summary>
+    /// Deletes an order note
+    /// </summary>
+    /// <param name="orderNote">The order note</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteOrderNoteAsync(OrderNote orderNote)
+    {
+        await _orderNoteRepository.DeleteAsync(orderNote);
+    }
+
+    /// <summary>
+    /// Formats the order note text
+    /// </summary>
+    /// <param name="orderNote">Order note</param>
+    /// <returns>Formatted text</returns>
+    public virtual string FormatOrderNoteText(OrderNote orderNote)
+    {
+        ArgumentNullException.ThrowIfNull(orderNote);
+
+        var text = orderNote.Note;
+
+        if (string.IsNullOrEmpty(text))
+            return string.Empty;
+
+        text = _htmlFormatter.FormatText(text, false, true, false, false, false, false);
+
+        return text;
+    }
+
+    /// <summary>
+    /// Inserts an order note
+    /// </summary>
+    /// <param name="orderNote">The order note</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertOrderNoteAsync(OrderNote orderNote)
+    {
+        await _orderNoteRepository.InsertAsync(orderNote);
+    }
+
+    #endregion
+
+    #region Recurring payments
+
+    /// <summary>
+    /// Deletes a recurring payment
+    /// </summary>
+    /// <param name="recurringPayment">Recurring payment</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteRecurringPaymentAsync(RecurringPayment recurringPayment)
+    {
+        await _recurringPaymentRepository.DeleteAsync(recurringPayment);
+    }
+
+    /// <summary>
+    /// Gets a recurring payment
+    /// </summary>
+    /// <param name="recurringPaymentId">The recurring payment identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the recurring payment
+    /// </returns>
+    public virtual async Task<RecurringPayment> GetRecurringPaymentByIdAsync(int recurringPaymentId)
+    {
+        return await _recurringPaymentRepository.GetByIdAsync(recurringPaymentId, cache => default);
+    }
+
+    /// <summary>
+    /// Inserts a recurring payment
+    /// </summary>
+    /// <param name="recurringPayment">Recurring payment</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertRecurringPaymentAsync(RecurringPayment recurringPayment)
+    {
+        await _recurringPaymentRepository.InsertAsync(recurringPayment);
+    }
+
+    /// <summary>
+    /// Updates the recurring payment
+    /// </summary>
+    /// <param name="recurringPayment">Recurring payment</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task UpdateRecurringPaymentAsync(RecurringPayment recurringPayment)
+    {
+        await _recurringPaymentRepository.UpdateAsync(recurringPayment);
+    }
+
+    /// <summary>
+    /// Search recurring payments
+    /// </summary>
+    /// <param name="storeId">The store identifier; 0 to load all records</param>
+    /// <param name="customerId">The customer identifier; 0 to load all records</param>
+    /// <param name="initialOrderId">The initial order identifier; 0 to load all records</param>
+    /// <param name="initialOrderStatus">Initial order status identifier; null to load all records</param>
+    /// <param name="pageIndex">Page index</param>
+    /// <param name="pageSize">Page size</param>
+    /// <param name="showHidden">A value indicating whether to show hidden records</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the recurring payments
+    /// </returns>
+    public virtual async Task<IPagedList<RecurringPayment>> SearchRecurringPaymentsAsync(int storeId = 0,
+        int customerId = 0, int initialOrderId = 0, OrderStatus? initialOrderStatus = null,
+        int pageIndex = 0, int pageSize = int.MaxValue, bool showHidden = false)
+    {
+        int? initialOrderStatusId = null;
+        if (initialOrderStatus.HasValue)
+            initialOrderStatusId = (int)initialOrderStatus.Value;
+
+        var query1 = from rp in _recurringPaymentRepository.Table
+            join o in _orderRepository.Table on rp.InitialOrderId equals o.Id
+            join c in _customerRepository.Table on o.CustomerId equals c.Id
+            where
+                !rp.Deleted &&
+                (showHidden || !o.Deleted) &&
+                (showHidden || !c.Deleted) &&
+                (showHidden || rp.IsActive) &&
+                (customerId == 0 || o.CustomerId == customerId) &&
+                (storeId == 0 || o.StoreId == storeId) &&
+                (initialOrderId == 0 || o.Id == initialOrderId) &&
+                (!initialOrderStatusId.HasValue || initialOrderStatusId.Value == 0 ||
+                 o.OrderStatusId == initialOrderStatusId.Value)
+            select rp.Id;
+
+        var query2 = from rp in _recurringPaymentRepository.Table
+            where query1.Contains(rp.Id)
+            orderby rp.StartDateUtc, rp.Id
+            select rp;
+
+        var recurringPayments = await query2.ToPagedListAsync(pageIndex, pageSize);
+
+        return recurringPayments;
+    }
+
+    #endregion
+
+    #region Recurring payments history
+
+    /// <summary>
+    /// Gets a recurring payment history
+    /// </summary>
+    /// <param name="recurringPayment">The recurring payment</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the result
+    /// </returns>
+    public virtual async Task<IList<RecurringPaymentHistory>> GetRecurringPaymentHistoryAsync(RecurringPayment recurringPayment)
+    {
+        ArgumentNullException.ThrowIfNull(recurringPayment);
+
+        return await _recurringPaymentHistoryRepository.Table
+            .Where(rph => rph.RecurringPaymentId == recurringPayment.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Inserts a recurring payment history entry
+    /// </summary>
+    /// <param name="recurringPaymentHistory">Recurring payment history entry</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertRecurringPaymentHistoryAsync(RecurringPaymentHistory recurringPaymentHistory)
+    {
+        await _recurringPaymentHistoryRepository.InsertAsync(recurringPaymentHistory);
+    }
+
+    #endregion
+
+    #endregion
 }

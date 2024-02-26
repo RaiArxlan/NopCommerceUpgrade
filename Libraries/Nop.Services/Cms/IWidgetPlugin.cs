@@ -1,36 +1,30 @@
-using System.Collections.Generic;
-using System.Web.Routing;
-using Nop.Core.Plugins;
+﻿using Nop.Services.Plugins;
 
-namespace Nop.Services.Cms
+namespace Nop.Services.Cms;
+
+/// <summary>
+/// Provides an interface for creating widgets
+/// </summary>
+public partial interface IWidgetPlugin : IPlugin
 {
     /// <summary>
-    /// Provides an interface for creating tax providers
+    /// Gets a value indicating whether to hide this plugin on the widget list page in the admin area
     /// </summary>
-    public partial interface IWidgetPlugin : IPlugin
-    {
-        /// <summary>
-        /// Gets widget zones where this widget should be rendered
-        /// </summary>
-        /// <returns>Widget zones</returns>
-        IList<string> GetWidgetZones();
+    bool HideInWidgetList { get; }
 
-        /// <summary>
-        /// Gets a route for plugin configuration
-        /// </summary>
-        /// <param name="actionName">Action name</param>
-        /// <param name="controllerName">Controller name</param>
-        /// <param name="routeValues">Route values</param>
-        void GetConfigurationRoute(out string actionName, out string controllerName, out RouteValueDictionary routeValues);
-        
+    /// <summary>
+    /// Gets widget zones where this widget should be rendered
+    /// </summary>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the widget zones
+    /// </returns>
+    Task<IList<string>> GetWidgetZonesAsync();
 
-        /// <summary>
-        /// Gets a route for displaying widget
-        /// </summary>
-        /// <param name="widgetZone">Widget zone where it's displayed</param>
-        /// <param name="actionName">Action name</param>
-        /// <param name="controllerName">Controller name</param>
-        /// <param name="routeValues">Route values</param>
-        void GetDisplayWidgetRoute(string widgetZone, out string actionName, out string controllerName, out RouteValueDictionary routeValues);
-    }
+    /// <summary>
+    /// Gets a type of a view component for displaying widget
+    /// </summary>
+    /// <param name="widgetZone">Name of the widget zone</param>
+    /// <returns>View component type</returns>
+    Type GetWidgetViewComponent(string widgetZone);
 }

@@ -1,54 +1,48 @@
-﻿using System.Collections.Generic;
-using Nop.Core.Domain.Payments;
+﻿using Nop.Core.Domain.Payments;
 
-namespace Nop.Services.Payments
+namespace Nop.Services.Payments;
+
+/// <summary>
+/// Capture payment result
+/// </summary>
+public partial class CapturePaymentResult
 {
-    /// <summary>
-    /// Represents a CapturePaymentResult
-    /// </summary>
-    public partial class CapturePaymentResult
+    public CapturePaymentResult()
     {
-        private PaymentStatus _newPaymentStatus = PaymentStatus.Pending;
-        public IList<string> Errors { get; set; }
-
-        public CapturePaymentResult() 
-        {
-            this.Errors = new List<string>();
-        }
-
-        public bool Success
-        {
-            get { return (this.Errors.Count == 0); }
-        }
-
-        public void AddError(string error)
-        {
-            this.Errors.Add(error);
-        }
-        
-        /// <summary>
-        /// Gets or sets the capture transaction identifier
-        /// </summary>
-        public string CaptureTransactionId { get; set; }
-
-        /// <summary>
-        /// Gets or sets the capture transaction result
-        /// </summary>
-        public string CaptureTransactionResult { get; set; }
-
-        /// <summary>
-        /// Gets or sets a payment status after processing
-        /// </summary>
-        public PaymentStatus NewPaymentStatus
-        {
-            get
-            {
-                return _newPaymentStatus;
-            }
-            set
-            {
-                _newPaymentStatus = value;
-            }
-        }
+        Errors = new List<string>();
     }
+
+    /// <summary>
+    /// Gets a value indicating whether request has been completed successfully
+    /// </summary>
+    public bool Success => !Errors.Any();
+
+    /// <summary>
+    /// Add error
+    /// </summary>
+    /// <param name="error">Error</param>
+    public void AddError(string error)
+    {
+        Errors.Add(error);
+    }
+
+    /// <summary>
+    /// Errors
+    /// </summary>
+    public IList<string> Errors { get; set; }
+
+    /// <summary>
+    /// Gets or sets the capture transaction identifier
+    /// </summary>
+    public string CaptureTransactionId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the capture transaction result
+    /// </summary>
+    public string CaptureTransactionResult { get; set; }
+
+    /// <summary>
+    /// Gets or sets a payment status after processing
+    /// </summary>
+    public PaymentStatus NewPaymentStatus { get; set; } = PaymentStatus.Pending;
 }

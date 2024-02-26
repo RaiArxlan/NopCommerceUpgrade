@@ -1,17 +1,17 @@
-namespace Nop.Core.Domain.Catalog
+namespace Nop.Core.Domain.Catalog;
+
+/// <summary>
+/// Represents a download activation type
+/// </summary>
+public enum DownloadActivationType
 {
     /// <summary>
-    /// Represents a download activation type
+    /// When order is paid
     /// </summary>
-    public enum DownloadActivationType
-    {
-        /// <summary>
-        /// When order is paid
-        /// </summary>
-        WhenOrderIsPaid = 1,
-        /// <summary>
-        /// Manually
-        /// </summary>
-        Manually = 10,
-    }
+    WhenOrderIsPaid = 0,
+
+    /// <summary>
+    /// Manually
+    /// </summary>
+    Manually = 10,
 }

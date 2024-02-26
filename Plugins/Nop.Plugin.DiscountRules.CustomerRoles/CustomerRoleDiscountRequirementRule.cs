@@ -1,80 +1,133 @@
-using System;
-using System.Linq;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Nop.Core;
-using Nop.Core.Plugins;
 using Nop.Services.Configuration;
+using Nop.Services.Customers;
 using Nop.Services.Discounts;
 using Nop.Services.Localization;
+using Nop.Services.Plugins;
 
-namespace Nop.Plugin.DiscountRules.CustomerRoles
+namespace Nop.Plugin.DiscountRules.CustomerRoles;
+
+public class CustomerRoleDiscountRequirementRule : BasePlugin, IDiscountRequirementRule
 {
-    public partial class CustomerRoleDiscountRequirementRule : BasePlugin, IDiscountRequirementRule
+    #region Fields
+
+    protected readonly IActionContextAccessor _actionContextAccessor;
+    protected readonly ICustomerService _customerService;
+    protected readonly IDiscountService _discountService;
+    protected readonly ILocalizationService _localizationService;
+    protected readonly ISettingService _settingService;
+    protected readonly IUrlHelperFactory _urlHelperFactory;
+    protected readonly IWebHelper _webHelper;
+
+    #endregion
+
+    #region Ctor
+
+    public CustomerRoleDiscountRequirementRule(IActionContextAccessor actionContextAccessor,
+        IDiscountService discountService,
+        ICustomerService customerService,
+        ILocalizationService localizationService,
+        ISettingService settingService,
+        IUrlHelperFactory urlHelperFactory,
+        IWebHelper webHelper)
     {
-        private readonly ISettingService _settingService;
-
-        public CustomerRoleDiscountRequirementRule(ISettingService settingService)
-        {
-            this._settingService = settingService;
-        }
-
-        /// <summary>
-        /// Check discount requirement
-        /// </summary>
-        /// <param name="request">Object that contains all information required to check the requirement (Current customer, discount, etc)</param>
-        /// <returns>true - requirement is met; otherwise, false</returns>
-        public bool CheckRequirement(CheckDiscountRequirementRequest request)
-        {
-            if (request == null)
-                throw new ArgumentNullException("request");
-
-            if (request.DiscountRequirement == null)
-                throw new NopException("Discount requirement is not set");
-
-            if (request.Customer == null)
-                return false;
-
-
-            var restrictedToCustomerRoleId = _settingService.GetSettingByKey<int>(string.Format("DiscountRequirement.MustBeAssignedToCustomerRole-{0}", request.DiscountRequirement.Id));
-
-            if (restrictedToCustomerRoleId == 0)
-                return false;
-
-            foreach (var customerRole in request.Customer.CustomerRoles.Where(cr => cr.Active).ToList())
-                if (restrictedToCustomerRoleId == customerRole.Id)
-                    return true;
-
-            return false;
-        }
-
-        /// <summary>
-        /// Get URL for rule configuration
-        /// </summary>
-        /// <param name="discountId">Discount identifier</param>
-        /// <param name="discountRequirementId">Discount requirement identifier (if editing)</param>
-        /// <returns>URL</returns>
-        public string GetConfigurationUrl(int discountId, int? discountRequirementId)
-        {
-            //configured in RouteProvider.cs
-            string result = "Plugins/DiscountRulesCustomerRoles/Configure/?discountId=" + discountId;
-            if (discountRequirementId.HasValue)
-                result += string.Format("&discountRequirementId={0}", discountRequirementId.Value);
-            return result;
-        }
-
-        public override void Install()
-        {
-            //locales
-            this.AddOrUpdatePluginLocaleResource("Plugins.DiscountRules.CustomerRoles.Fields.CustomerRole", "Required customer role");
-            this.AddOrUpdatePluginLocaleResource("Plugins.DiscountRules.CustomerRoles.Fields.CustomerRole.Hint", "Discount will be applied if customer is in the selected customer role.");
-            base.Install();
-        }
-
-        public override void Uninstall()
-        {
-            //locales
-            this.DeletePluginLocaleResource("Plugins.DiscountRules.CustomerRoles.Fields.CustomerRole");
-            this.DeletePluginLocaleResource("Plugins.DiscountRules.CustomerRoles.Fields.CustomerRole.Hint");
-            base.Uninstall();
-        }
+        _actionContextAccessor = actionContextAccessor;
+        _customerService = customerService;
+        _discountService = discountService;
+        _localizationService = localizationService;
+        _settingService = settingService;
+        _urlHelperFactory = urlHelperFactory;
+        _webHelper = webHelper;
     }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Check discount requirement
+    /// </summary>
+    /// <param name="request">Object that contains all information required to check the requirement (Current customer, discount, etc)</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the result
+    /// </returns>
+    public async Task<DiscountRequirementValidationResult> CheckRequirementAsync(DiscountRequirementValidationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        //invalid by default
+        var result = new DiscountRequirementValidationResult();
+
+        if (request.Customer == null)
+            return result;
+
+        //try to get saved restricted customer role identifier
+        var restrictedRoleId = await _settingService.GetSettingByKeyAsync<int>(string.Format(DiscountRequirementDefaults.SettingsKey, request.DiscountRequirementId));
+        if (restrictedRoleId == 0)
+            return result;
+
+        //result is valid if the customer belongs to the restricted role
+        result.IsValid = (await _customerService.GetCustomerRolesAsync(request.Customer)).Any(role => role.Id == restrictedRoleId);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Get URL for rule configuration
+    /// </summary>
+    /// <param name="discountId">Discount identifier</param>
+    /// <param name="discountRequirementId">Discount requirement identifier (if editing)</param>
+    /// <returns>URL</returns>
+    public string GetConfigurationUrl(int discountId, int? discountRequirementId)
+    {
+        var urlHelper = _urlHelperFactory.GetUrlHelper(_actionContextAccessor.ActionContext);
+
+        return urlHelper.Action("Configure", "DiscountRulesCustomerRoles",
+            new { discountId = discountId, discountRequirementId = discountRequirementId }, _webHelper.GetCurrentRequestProtocol());
+    }
+
+    /// <summary>
+    /// Install the plugin
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public override async Task InstallAsync()
+    {
+        //locales
+        await _localizationService.AddOrUpdateLocaleResourceAsync(new Dictionary<string, string>
+        {
+            ["Plugins.DiscountRules.CustomerRoles.Fields.CustomerRole"] = "Required customer role",
+            ["Plugins.DiscountRules.CustomerRoles.Fields.CustomerRole.Hint"] = "Discount will be applied if customer is in the selected customer role.",
+            ["Plugins.DiscountRules.CustomerRoles.Fields.CustomerRole.Select"] = "Select customer role",
+            ["Plugins.DiscountRules.CustomerRoles.Fields.CustomerRoleId.Required"] = "Customer role is required",
+            ["Plugins.DiscountRules.CustomerRoles.Fields.DiscountId.Required"] = "Discount is required"
+        });
+
+        await base.InstallAsync();
+    }
+
+    /// <summary>
+    /// Uninstall the plugin
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public override async Task UninstallAsync()
+    {
+        //discount requirements
+        var discountRequirements = (await _discountService.GetAllDiscountRequirementsAsync())
+            .Where(discountRequirement => discountRequirement.DiscountRequirementRuleSystemName == DiscountRequirementDefaults.SystemName);
+        foreach (var discountRequirement in discountRequirements)
+        {
+            await _discountService.DeleteDiscountRequirementAsync(discountRequirement, false);
+        }
+
+        //locales
+        await _localizationService.DeleteLocaleResourcesAsync("Plugins.DiscountRules.CustomerRoles");
+
+        await base.UninstallAsync();
+    }
+
+    #endregion
 }

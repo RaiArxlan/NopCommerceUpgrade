@@ -1,32 +1,24 @@
-using System.Collections.Generic;
-using Nop.Core.Domain.Localization;
+﻿using Nop.Core.Domain.Localization;
 
-namespace Nop.Core.Domain.Catalog
+namespace Nop.Core.Domain.Catalog;
+
+/// <summary>
+/// Represents a specification attribute
+/// </summary>
+public partial class SpecificationAttribute : BaseEntity, ILocalizedEntity
 {
     /// <summary>
-    /// Represents a specification attribute
+    /// Gets or sets the name
     /// </summary>
-    public partial class SpecificationAttribute : BaseEntity, ILocalizedEntity
-    {
-        private ICollection<SpecificationAttributeOption> _specificationAttributeOptions;
+    public string Name { get; set; }
 
-        /// <summary>
-        /// Gets or sets the name
-        /// </summary>
-        public string Name { get; set; }
+    /// <summary>
+    /// Gets or sets the display order
+    /// </summary>
+    public int DisplayOrder { get; set; }
 
-        /// <summary>
-        /// Gets or sets the display order
-        /// </summary>
-        public int DisplayOrder { get; set; }
-
-        /// <summary>
-        /// Gets or sets the specification attribute options
-        /// </summary>
-        public virtual ICollection<SpecificationAttributeOption> SpecificationAttributeOptions
-        {
-            get { return _specificationAttributeOptions ?? (_specificationAttributeOptions = new List<SpecificationAttributeOption>()); }
-            protected set { _specificationAttributeOptions = value; }
-        }
-    }
+    /// <summary>
+    /// Gets or sets the specification attribute group identifier
+    /// </summary>
+    public int? SpecificationAttributeGroupId { get; set; }
 }

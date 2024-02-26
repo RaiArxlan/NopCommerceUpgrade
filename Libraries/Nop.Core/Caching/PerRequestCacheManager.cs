@@ -1,148 +1,76 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Text.RegularExpressions;
-using System.Web;
+﻿using Nop.Core.Configuration;
+using Nop.Core.Infrastructure;
 
-namespace Nop.Core.Caching
+namespace Nop.Core.Caching;
+
+/// <summary>
+/// Represents a per request cache manager
+/// </summary>
+public partial class PerRequestCacheManager : CacheKeyService, IShortTermCacheManager
 {
-    /// <summary>
-    /// Represents a manager for caching during an HTTP request (short term caching)
-    /// </summary>
-    public partial class PerRequestCacheManager : ICacheManager
+    #region Fields
+
+    protected readonly ConcurrentTrie<object> _concurrentCollection;
+
+    #endregion
+
+    #region Ctor
+
+    public PerRequestCacheManager(AppSettings appSettings) : base(appSettings)
     {
-        private readonly HttpContextBase _context;
-
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="context">Context</param>
-        public PerRequestCacheManager(HttpContextBase context)
-        {
-            this._context = context;
-        }
-        
-        /// <summary>
-        /// Creates a new instance of the NopRequestCache class
-        /// </summary>
-        protected virtual IDictionary GetItems()
-        {
-            if (_context != null)
-                return _context.Items;
-
-            return null;
-        }
-
-        /// <summary>
-        /// Gets or sets the value associated with the specified key.
-        /// </summary>
-        /// <typeparam name="T">Type</typeparam>
-        /// <param name="key">The key of the value to get.</param>
-        /// <returns>The value associated with the specified key.</returns>
-        public virtual T Get<T>(string key)
-        {
-            var items = GetItems();
-            if (items == null)
-                return default(T);
-
-            return (T)items[key];
-        }
-
-        /// <summary>
-        /// Adds the specified key and object to the cache.
-        /// </summary>
-        /// <param name="key">key</param>
-        /// <param name="data">Data</param>
-        /// <param name="cacheTime">Cache time</param>
-        public virtual void Set(string key, object data, int cacheTime)
-        {
-            var items = GetItems();
-            if (items == null)
-                return;
-
-            if (data != null)
-            {
-                if (items.Contains(key))
-                    items[key] = data;
-                else
-                    items.Add(key, data);
-            }
-        }
-
-        /// <summary>
-        /// Gets a value indicating whether the value associated with the specified key is cached
-        /// </summary>
-        /// <param name="key">key</param>
-        /// <returns>Result</returns>
-        public virtual bool IsSet(string key)
-        {
-            var items = GetItems();
-            if (items == null)
-                return false;
-            
-            return (items[key] != null);
-        }
-
-        /// <summary>
-        /// Removes the value with the specified key from the cache
-        /// </summary>
-        /// <param name="key">/key</param>
-        public virtual void Remove(string key)
-        {
-            var items = GetItems();
-            if (items == null)
-                return;
-
-            items.Remove(key);
-        }
-
-        /// <summary>
-        /// Removes items by pattern
-        /// </summary>
-        /// <param name="pattern">pattern</param>
-        public virtual void RemoveByPattern(string pattern)
-        {
-            var items = GetItems();
-            if (items == null)
-                return;
-
-            var enumerator = items.GetEnumerator();
-            var regex = new Regex(pattern, RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.IgnoreCase);
-            var keysToRemove = new List<String>();
-            while (enumerator.MoveNext())
-            {
-                if (regex.IsMatch(enumerator.Key.ToString()))
-                {
-                    keysToRemove.Add(enumerator.Key.ToString());
-                }
-            }
-
-            foreach (string key in keysToRemove)
-            {
-                items.Remove(key);
-            }
-        }
-
-        /// <summary>
-        /// Clear all cache data
-        /// </summary>
-        public virtual void Clear()
-        {
-            var items = GetItems();
-            if (items == null)
-                return;
-
-            var enumerator = items.GetEnumerator();
-            var keysToRemove = new List<String>();
-            while (enumerator.MoveNext())
-            {
-                keysToRemove.Add(enumerator.Key.ToString());
-            }
-
-            foreach (string key in keysToRemove)
-            {
-                items.Remove(key);
-            }
-        }
+        _concurrentCollection = new ConcurrentTrie<object>();
     }
+
+    #endregion
+
+    #region Methods
+        
+    /// <summary>
+    /// Get a cached item. If it's not in the cache yet, then load and cache it
+    /// </summary>
+    /// <typeparam name="T">Type of cached item</typeparam>
+    /// /// <param name="acquire">Function to load item if it's not in the cache yet</param>
+    /// <param name="cacheKey">Initial cache key</param>
+    /// <param name="cacheKeyParameters">Parameters to create cache key</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the cached value associated with the specified key
+    /// </returns>
+    public async Task<T> GetAsync<T>(Func<Task<T>> acquire, CacheKey cacheKey, params object[] cacheKeyParameters)
+    {
+        var key = cacheKey.Create(CreateCacheKeyParameters, cacheKeyParameters).Key;
+
+        if (_concurrentCollection.TryGetValue(key, out var data))
+            return (T)data;
+
+        var result = await acquire();
+
+        if (result != null)
+            _concurrentCollection.Add(key, result);
+
+        return result;
+    }
+        
+    /// <summary>
+    /// Remove items by cache key prefix
+    /// </summary>
+    /// <param name="prefix">Cache key prefix</param>
+    /// <param name="prefixParameters">Parameters to create cache key prefix</param>
+    public virtual void RemoveByPrefix(string prefix, params object[] prefixParameters)
+    {
+        var keyPrefix = PrepareKeyPrefix(prefix, prefixParameters);
+        _concurrentCollection.Prune(keyPrefix, out _);
+    }
+        
+    /// <summary>
+    /// Remove the value with the specified key from the cache
+    /// </summary>
+    /// <param name="cacheKey">Cache key</param>
+    /// <param name="cacheKeyParameters">Parameters to create cache key</param>
+    public virtual void Remove(string cacheKey, params object[] cacheKeyParameters)
+    {
+        _concurrentCollection.Remove(PrepareKey(new CacheKey(cacheKey), cacheKeyParameters).Key);
+    }
+
+    #endregion
 }

@@ -1,0 +1,11 @@
+﻿{
+  "Group": "Test",
+  "FriendlyName": "Widget for POC",
+  "SystemName": "Widget.HelloWorld",
+  "Version": "1.0",
+  "SupportedVersions": [ "4.70" ],
+  "Author": "Rai Arslan",
+  "DisplayOrder": 1,
+  "FileName": "Nop.Plugin.Widget.HelloWorld.dll",
+  "Description": "This is a test widghet with backend & UI."
+}

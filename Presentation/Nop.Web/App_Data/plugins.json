@@ -1,0 +1,88 @@
+﻿{
+  "InstalledPluginNames": [
+    "Obsolete field, using only for compatibility"
+  ],
+  "InstalledPlugins": [
+    {
+      "SystemName": "Payments.PayPalCommerce",
+      "Version": "4.70.4"
+    },
+    {
+      "SystemName": "DiscountRequirement.MustBeAssignedToCustomerRole",
+      "Version": "4.70.2"
+    },
+    {
+      "SystemName": "CurrencyExchange.ECB",
+      "Version": "4.70.2"
+    },
+    {
+      "SystemName": "Misc.Brevo",
+      "Version": "4.70.7"
+    },
+    {
+      "SystemName": "Misc.NopMobileApp",
+      "Version": "4.70.1"
+    },
+    {
+      "SystemName": "Misc.WebApi.Frontend",
+      "Version": "4.70.2"
+    },
+    {
+      "SystemName": "Misc.Zettle",
+      "Version": "4.70.4"
+    },
+    {
+      "SystemName": "Payments.CheckMoneyOrder",
+      "Version": "4.70.2"
+    },
+    {
+      "SystemName": "Payments.CyberSource",
+      "Version": "4.70.3"
+    },
+    {
+      "SystemName": "Payments.Manual",
+      "Version": "4.70.3"
+    },
+    {
+      "SystemName": "Pickup.PickupInStore",
+      "Version": "4.70.4"
+    },
+    {
+      "SystemName": "Shipping.FixedByWeightByTotal",
+      "Version": "4.70.6"
+    },
+    {
+      "SystemName": "Tax.FixedOrByCountryStateZip",
+      "Version": "4.70.4"
+    },
+    {
+      "SystemName": "Widgets.GoogleAnalytics",
+      "Version": "4.70.2"
+    },
+    {
+      "SystemName": "Widgets.NivoSlider",
+      "Version": "4.70.2"
+    },
+    {
+      "SystemName": "Widgets.What3words",
+      "Version": "4.70.3"
+    },
+    {
+      "SystemName": "Test.DistOfCustByCountryPlugin",
+      "Version": "1.0"
+    },
+    {
+      "SystemName": "Widget.HelloWorld",
+      "Version": "1.0"
+    }
+  ],
+  "PluginNamesToUninstall": [],
+  "PluginNamesToDelete": [
+    "ExternalAuth.Facebook",
+    "MultiFactorAuth.GoogleAuthenticator",
+    "Shipping.UPS",
+    "Tax.Avalara",
+    "Widgets.FacebookPixel"
+  ],
+  "PluginNamesToInstall": []
+}

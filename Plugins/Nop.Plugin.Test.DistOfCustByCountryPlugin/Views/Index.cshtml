@@ -1,0 +1,27 @@
+﻿@using Nop.Web.Framework.Models.DataTables
+@{
+    //Layout = "_ConfigurePlugin";
+    Layout = null;
+}
+
+@model IList<Nop.Plugin.Test.DistOfCustByCountryPlugin.Models.CustomersDistribution>
+
+<div class="panel">
+    <div class="panel-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover table-striped">
+                <tr>
+                    <th>Country</th>
+                    <th>Customer Count</th>
+                </tr>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td>@item.Country</td>
+                        <td>@item.NoOfCustomers</td>
+                    </tr>
+                }
+            </table>
+        </div>
+    </div>
+</div>

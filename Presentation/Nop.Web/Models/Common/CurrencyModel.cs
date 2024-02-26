@@ -1,11 +1,10 @@
-﻿using Nop.Web.Framework.Mvc;
+﻿using Nop.Web.Framework.Models;
 
-namespace Nop.Web.Models.Common
+namespace Nop.Web.Models.Common;
+
+public partial record CurrencyModel : BaseNopEntityModel
 {
-    public partial class CurrencyModel : BaseNopEntityModel
-    {
-        public string Name { get; set; }
+    public string Name { get; set; }
 
-        public string CurrencySymbol { get; set; }
-    }
+    public string CurrencySymbol { get; set; }
 }

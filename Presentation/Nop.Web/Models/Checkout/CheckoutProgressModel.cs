@@ -1,19 +1,18 @@
-﻿using Nop.Web.Framework.Mvc;
+﻿using Nop.Web.Framework.Models;
 
-namespace Nop.Web.Models.Checkout
+namespace Nop.Web.Models.Checkout;
+
+public partial record CheckoutProgressModel : BaseNopModel
 {
-    public partial class CheckoutProgressModel : BaseNopModel
-    {
-        public CheckoutProgressStep CheckoutProgressStep { get; set; }
-    }
+    public CheckoutProgressStep CheckoutProgressStep { get; set; }
+}
 
-    public enum CheckoutProgressStep
-    {
-        Cart,
-        Address,
-        Shipping,
-        Payment,
-        Confirm,
-        Complete
-    }
+public enum CheckoutProgressStep
+{
+    Cart,
+    Address,
+    Shipping,
+    Payment,
+    Confirm,
+    Complete
 }

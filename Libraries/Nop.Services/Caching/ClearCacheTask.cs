@@ -1,20 +1,37 @@
 ﻿using Nop.Core.Caching;
-using Nop.Services.Tasks;
+using Nop.Services.ScheduleTasks;
 
-namespace Nop.Services.Caching
+namespace Nop.Services.Caching;
+
+/// <summary>
+/// Clear cache scheduled task implementation
+/// </summary>
+public partial class ClearCacheTask : IScheduleTask
 {
-    /// <summary>
-    /// Clear cache schedueled task implementation
-    /// </summary>
-    public partial class ClearCacheTask : ITask
+    #region Fields
+
+    protected readonly IStaticCacheManager _staticCacheManager;
+
+    #endregion
+
+    #region Ctor
+
+    public ClearCacheTask(IStaticCacheManager staticCacheManager)
     {
-        /// <summary>
-        /// Executes a task
-        /// </summary>
-        public void Execute()
-        {
-            var cacheManager = new MemoryCacheManager();
-            cacheManager.Clear();
-        }
+        _staticCacheManager = staticCacheManager;
     }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Executes a task
+    /// </summary>
+    public async System.Threading.Tasks.Task ExecuteAsync()
+    {
+        await _staticCacheManager.ClearAsync();
+    }
+
+    #endregion
 }

@@ -1,34 +1,42 @@
-﻿using Nop.Web.Framework.Mvc;
+﻿using Nop.Web.Framework.Models;
 
-namespace Nop.Web.Models.Customer
+namespace Nop.Web.Models.Customer;
+
+public partial record CustomerNavigationModel : BaseNopModel
 {
-    public partial class CustomerNavigationModel : BaseNopModel
+    public CustomerNavigationModel()
     {
-        public bool HideInfo { get; set; }
-        public bool HideAddresses { get; set; }
-        public bool HideOrders { get; set; }
-        public bool HideBackInStockSubscriptions { get; set; }
-        public bool HideReturnRequests { get; set; }
-        public bool HideDownloadableProducts { get; set; }
-        public bool HideRewardPoints { get; set; }
-        public bool HideChangePassword { get; set; }
-        public bool HideAvatar { get; set; }
-        public bool HideForumSubscriptions { get; set; }
-
-        public CustomerNavigationEnum SelectedTab { get; set; }
+        CustomerNavigationItems = new List<CustomerNavigationItemModel>();
     }
 
-    public enum CustomerNavigationEnum
-    {
-        Info = 0,
-        Addresses = 10,
-        Orders = 20,
-        BackInStockSubscriptions = 30,
-        ReturnRequests = 40,
-        DownloadableProducts = 50,
-        RewardPoints = 60,
-        ChangePassword = 70,
-        Avatar = 80,
-        ForumSubscriptions = 90
-    }
+    public IList<CustomerNavigationItemModel> CustomerNavigationItems { get; set; }
+
+    public int SelectedTab { get; set; }
+}
+
+public partial record CustomerNavigationItemModel : BaseNopModel
+{
+    public string RouteName { get; set; }
+    public string Title { get; set; }
+    public int Tab { get; set; }
+    public string ItemClass { get; set; }
+}
+
+public enum CustomerNavigationEnum
+{
+    Info = 0,
+    Addresses = 10,
+    Orders = 20,
+    BackInStockSubscriptions = 30,
+    ReturnRequests = 40,
+    DownloadableProducts = 50,
+    RewardPoints = 60,
+    ChangePassword = 70,
+    Avatar = 80,
+    ForumSubscriptions = 90,
+    ProductReviews = 100,
+    VendorInfo = 110,
+    GdprTools = 120,
+    CheckGiftCardBalance = 130,
+    MultiFactorAuthentication = 140
 }

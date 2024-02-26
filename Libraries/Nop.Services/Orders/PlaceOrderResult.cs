@@ -1,34 +1,38 @@
-﻿using System.Collections.Generic;
-using Nop.Core.Domain.Orders;
+﻿using Nop.Core.Domain.Orders;
 
-namespace Nop.Services.Orders
+namespace Nop.Services.Orders;
+
+/// <summary>
+/// Place order result
+/// </summary>
+public partial class PlaceOrderResult
 {
-    /// <summary>
-    /// Represents a PlaceOrderResult
-    /// </summary>
-    public partial class PlaceOrderResult
+    public PlaceOrderResult()
     {
-        public IList<string> Errors { get; set; }
-
-        public PlaceOrderResult() 
-        {
-            this.Errors = new List<string>();
-        }
-
-        public bool Success
-        {
-            get { return (this.Errors.Count == 0); }
-        }
-
-        public void AddError(string error)
-        {
-            this.Errors.Add(error);
-        }
-
-        
-        /// <summary>
-        /// Gets or sets the placed order
-        /// </summary>
-        public Order PlacedOrder { get; set; }
+        Errors = new List<string>();
     }
+
+    /// <summary>
+    /// Gets a value indicating whether request has been completed successfully
+    /// </summary>
+    public bool Success => !Errors.Any();
+
+    /// <summary>
+    /// Add error
+    /// </summary>
+    /// <param name="error">Error</param>
+    public void AddError(string error)
+    {
+        Errors.Add(error);
+    }
+
+    /// <summary>
+    /// Errors
+    /// </summary>
+    public IList<string> Errors { get; set; }
+
+    /// <summary>
+    /// Gets or sets the placed order
+    /// </summary>
+    public Order PlacedOrder { get; set; }
 }

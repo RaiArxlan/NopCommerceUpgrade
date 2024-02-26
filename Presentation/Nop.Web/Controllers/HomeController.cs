@@ -1,14 +1,11 @@
-﻿using System.Web.Mvc;
-using Nop.Web.Framework.Security;
+﻿using Microsoft.AspNetCore.Mvc;
 
-namespace Nop.Web.Controllers
+namespace Nop.Web.Controllers;
+
+public partial class HomeController : BasePublicController
 {
-    public partial class HomeController : BasePublicController
+    public virtual IActionResult Index()
     {
-        [NopHttpsRequirement(SslRequirement.No)]
-        public ActionResult Index()
-        {
-            return View();
-        }
+        return View();
     }
 }

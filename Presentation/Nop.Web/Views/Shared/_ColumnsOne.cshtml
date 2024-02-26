@@ -1,8 +1,11 @@
 ﻿@{
-    Layout = "~/Views/Shared/_Root.cshtml";
+    Layout = "_Root";
 }
+
+@await RenderSectionAsync("Breadcrumb", false)
+
 <div class="center-1">
-    @Html.Widget("main_column_before")
+    @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.MainColumnBefore })
     @RenderBody()
-    @Html.Widget("main_column_after")
+    @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.MainColumnAfter })
 </div>

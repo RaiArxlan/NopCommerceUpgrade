@@ -1,244 +1,263 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using Nop.Core;
+﻿using Nop.Core;
 using Nop.Core.Caching;
-using Nop.Core.Data;
 using Nop.Core.Domain.Catalog;
 using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Security;
+using Nop.Data;
+using Nop.Services.Customers;
 
-namespace Nop.Services.Security
+namespace Nop.Services.Security;
+
+/// <summary>
+/// ACL service
+/// </summary>
+public partial class AclService : IAclService
 {
-    /// <summary>
-    /// ACL service
-    /// </summary>
-    public partial class AclService : IAclService
+    #region Fields
+
+    protected readonly CatalogSettings _catalogSettings;
+    protected readonly ICustomerService _customerService;
+    protected readonly IRepository<AclRecord> _aclRecordRepository;
+    protected readonly IStaticCacheManager _staticCacheManager;
+    protected readonly IWorkContext _workContext;
+
+    #endregion
+
+    #region Ctor
+
+    public AclService(CatalogSettings catalogSettings,
+        ICustomerService customerService,
+        IRepository<AclRecord> aclRecordRepository,
+        IStaticCacheManager staticCacheManager,
+        IWorkContext workContext)
     {
-        #region Constants
-        
-        /// <summary>
-        /// Key for caching
-        /// </summary>
-        /// <remarks>
-        /// {0} : entity ID
-        /// {1} : entity name
-        /// </remarks>
-        private const string ACLRECORD_BY_ENTITYID_NAME_KEY = "Nop.aclrecord.entityid-name-{0}-{1}";
-        /// <summary>
-        /// Key pattern to clear cache
-        /// </summary>
-        private const string ACLRECORD_PATTERN_KEY = "Nop.aclrecord.";
-
-        #endregion
-
-        #region Fields
-
-        private readonly IRepository<AclRecord> _aclRecordRepository;
-        private readonly IWorkContext _workContext;
-        private readonly ICacheManager _cacheManager;
-        private readonly CatalogSettings _catalogSettings;
-
-        #endregion
-
-        #region Ctor
-
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="cacheManager">Cache manager</param>
-        /// <param name="workContext">Work context</param>
-        /// <param name="aclRecordRepository">ACL record repository</param>
-        /// <param name="catalogSettings">Catalog settings</param>
-        public AclService(ICacheManager cacheManager, 
-            IWorkContext workContext,
-            IRepository<AclRecord> aclRecordRepository, 
-            CatalogSettings catalogSettings)
-        {
-            this._cacheManager = cacheManager;
-            this._workContext = workContext;
-            this._aclRecordRepository = aclRecordRepository;
-            this._catalogSettings = catalogSettings;
-        }
-
-        #endregion
-
-        #region Methods
-
-        /// <summary>
-        /// Deletes an ACL record
-        /// </summary>
-        /// <param name="aclRecord">ACL record</param>
-        public virtual void DeleteAclRecord(AclRecord aclRecord)
-        {
-            if (aclRecord == null)
-                throw new ArgumentNullException("aclRecord");
-
-            _aclRecordRepository.Delete(aclRecord);
-
-            //cache
-            _cacheManager.RemoveByPattern(ACLRECORD_PATTERN_KEY);
-        }
-
-        /// <summary>
-        /// Gets an ACL record
-        /// </summary>
-        /// <param name="aclRecordId">ACL record identifier</param>
-        /// <returns>ACL record</returns>
-        public virtual AclRecord GetAclRecordById(int aclRecordId)
-        {
-            if (aclRecordId == 0)
-                return null;
-
-            return _aclRecordRepository.GetById(aclRecordId);
-        }
-
-        /// <summary>
-        /// Gets ACL records
-        /// </summary>
-        /// <typeparam name="T">Type</typeparam>
-        /// <param name="entity">Entity</param>
-        /// <returns>ACL records</returns>
-        public virtual IList<AclRecord> GetAclRecords<T>(T entity) where T : BaseEntity, IAclSupported
-        {
-            if (entity == null)
-                throw new ArgumentNullException("entity");
-
-            int entityId = entity.Id;
-            string entityName = typeof(T).Name;
-
-            var query = from ur in _aclRecordRepository.Table
-                        where ur.EntityId == entityId &&
-                        ur.EntityName == entityName
-                        select ur;
-            var aclRecords = query.ToList();
-            return aclRecords;
-        }
-
-
-        /// <summary>
-        /// Inserts an ACL record
-        /// </summary>
-        /// <param name="aclRecord">ACL record</param>
-        public virtual void InsertAclRecord(AclRecord aclRecord)
-        {
-            if (aclRecord == null)
-                throw new ArgumentNullException("aclRecord");
-
-            _aclRecordRepository.Insert(aclRecord);
-
-            //cache
-            _cacheManager.RemoveByPattern(ACLRECORD_PATTERN_KEY);
-        }
-
-        /// <summary>
-        /// Inserts an ACL record
-        /// </summary>
-        /// <typeparam name="T">Type</typeparam>
-        /// <param name="customerRoleId">Customer role id</param>
-        /// <param name="entity">Entity</param>
-        public virtual void InsertAclRecord<T>(T entity, int customerRoleId) where T : BaseEntity, IAclSupported
-        {
-            if (entity == null)
-                throw new ArgumentNullException("entity");
-
-            if (customerRoleId == 0)
-                throw new ArgumentOutOfRangeException("customerRoleId");
-
-            int entityId = entity.Id;
-            string entityName = typeof(T).Name;
-
-            var aclRecord = new AclRecord
-            {
-                EntityId = entityId,
-                EntityName = entityName,
-                CustomerRoleId = customerRoleId
-            };
-
-            InsertAclRecord(aclRecord);
-        }
-
-        /// <summary>
-        /// Updates the ACL record
-        /// </summary>
-        /// <param name="aclRecord">ACL record</param>
-        public virtual void UpdateAclRecord(AclRecord aclRecord)
-        {
-            if (aclRecord == null)
-                throw new ArgumentNullException("aclRecord");
-
-            _aclRecordRepository.Update(aclRecord);
-
-            //cache
-            _cacheManager.RemoveByPattern(ACLRECORD_PATTERN_KEY);
-        }
-
-        /// <summary>
-        /// Find customer role identifiers with granted access
-        /// </summary>
-        /// <typeparam name="T">Type</typeparam>
-        /// <param name="entity">Wntity</param>
-        /// <returns>Customer role identifiers</returns>
-        public virtual int[] GetCustomerRoleIdsWithAccess<T>(T entity) where T : BaseEntity, IAclSupported
-        {
-            if (entity == null)
-                throw new ArgumentNullException("entity");
-
-            int entityId = entity.Id;
-            string entityName = typeof(T).Name;
-
-            string key = string.Format(ACLRECORD_BY_ENTITYID_NAME_KEY, entityId, entityName);
-            return _cacheManager.Get(key, () =>
-            {
-                var query = from ur in _aclRecordRepository.Table
-                            where ur.EntityId == entityId &&
-                            ur.EntityName == entityName 
-                            select ur.CustomerRoleId;
-                return query.ToArray();
-            });
-        }
-
-        /// <summary>
-        /// Authorize ACL permission
-        /// </summary>
-        /// <typeparam name="T">Type</typeparam>
-        /// <param name="entity">Wntity</param>
-        /// <returns>true - authorized; otherwise, false</returns>
-        public virtual bool Authorize<T>(T entity) where T : BaseEntity, IAclSupported
-        {
-            return Authorize(entity, _workContext.CurrentCustomer);
-        }
-
-        /// <summary>
-        /// Authorize ACL permission
-        /// </summary>
-        /// <typeparam name="T">Type</typeparam>
-        /// <param name="entity">Wntity</param>
-        /// <param name="customer">Customer</param>
-        /// <returns>true - authorized; otherwise, false</returns>
-        public virtual bool Authorize<T>(T entity, Customer customer) where T : BaseEntity, IAclSupported
-        {
-            if (entity == null)
-                return false;
-
-            if (customer == null)
-                return false;
-
-            if (_catalogSettings.IgnoreAcl)
-                return true;
-
-            if (!entity.SubjectToAcl)
-                return true;
-
-            foreach (var role1 in customer.CustomerRoles.Where(cr => cr.Active))
-                foreach (var role2Id in GetCustomerRoleIdsWithAccess(entity))
-                    if (role1.Id == role2Id)
-                        //yes, we have such permission
-                        return true;
-
-            //no permission found
-            return false;
-        }
-        #endregion
+        _catalogSettings = catalogSettings;
+        _customerService = customerService;
+        _aclRecordRepository = aclRecordRepository;
+        _staticCacheManager = staticCacheManager;
+        _workContext = workContext;
     }
+
+    #endregion
+
+    #region Utilities
+
+    /// <summary>
+    /// Inserts an ACL record
+    /// </summary>
+    /// <param name="aclRecord">ACL record</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    protected virtual async Task InsertAclRecordAsync(AclRecord aclRecord)
+    {
+        await _aclRecordRepository.InsertAsync(aclRecord);
+    }
+
+    /// <summary>
+    /// Get a value indicating whether any ACL records exist for entity type are related to customer roles
+    /// </summary>
+    /// <typeparam name="TEntity">Type of entity that supports the ACL</typeparam>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains true if exist; otherwise false
+    /// </returns>
+    protected virtual async Task<bool> IsEntityAclMappingExistAsync<TEntity>() where TEntity : BaseEntity, IAclSupported
+    {
+        var entityName = typeof(TEntity).Name;
+        var key = _staticCacheManager.PrepareKeyForDefaultCache(NopSecurityDefaults.EntityAclRecordExistsCacheKey, entityName);
+
+        var query = from acl in _aclRecordRepository.Table
+            where acl.EntityName == entityName
+            select acl;
+
+        return await _staticCacheManager.GetAsync(key, query.Any);
+    }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Apply ACL to the passed query
+    /// </summary>
+    /// <typeparam name="TEntity">Type of entity that supports the ACL</typeparam>
+    /// <param name="query">Query to filter</param>
+    /// <param name="customer">Customer</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the filtered query
+    /// </returns>
+    public virtual async Task<IQueryable<TEntity>> ApplyAcl<TEntity>(IQueryable<TEntity> query, Customer customer)
+        where TEntity : BaseEntity, IAclSupported
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        ArgumentNullException.ThrowIfNull(customer);
+
+        var customerRoleIds = await _customerService.GetCustomerRoleIdsAsync(customer);
+        return await ApplyAcl(query, customerRoleIds);
+    }
+
+    /// <summary>
+    /// Apply ACL to the passed query
+    /// </summary>
+    /// <typeparam name="TEntity">Type of entity that supports the ACL</typeparam>
+    /// <param name="query">Query to filter</param>
+    /// <param name="customerRoleIds">Identifiers of customer's roles</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the filtered query
+    /// </returns>
+    public virtual async Task<IQueryable<TEntity>> ApplyAcl<TEntity>(IQueryable<TEntity> query, int[] customerRoleIds)
+        where TEntity : BaseEntity, IAclSupported
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        ArgumentNullException.ThrowIfNull(customerRoleIds);
+
+        if (!customerRoleIds.Any() || _catalogSettings.IgnoreAcl || !await IsEntityAclMappingExistAsync<TEntity>())
+            return query;
+
+        return from entity in query
+            where !entity.SubjectToAcl || _aclRecordRepository.Table.Any(acl =>
+                acl.EntityName == typeof(TEntity).Name && acl.EntityId == entity.Id && customerRoleIds.Contains(acl.CustomerRoleId))
+            select entity;
+    }
+
+    /// <summary>
+    /// Deletes an ACL record
+    /// </summary>
+    /// <param name="aclRecord">ACL record</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteAclRecordAsync(AclRecord aclRecord)
+    {
+        await _aclRecordRepository.DeleteAsync(aclRecord);
+    }
+
+    /// <summary>
+    /// Gets ACL records
+    /// </summary>
+    /// <typeparam name="TEntity">Type of entity that supports the ACL</typeparam>
+    /// <param name="entity">Entity</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the aCL records
+    /// </returns>
+    public virtual async Task<IList<AclRecord>> GetAclRecordsAsync<TEntity>(TEntity entity) where TEntity : BaseEntity, IAclSupported
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var entityId = entity.Id;
+        var entityName = entity.GetType().Name;
+
+        var query = from ur in _aclRecordRepository.Table
+            where ur.EntityId == entityId &&
+                  ur.EntityName == entityName
+            select ur;
+        var aclRecords = await query.ToListAsync();
+
+        return aclRecords;
+    }
+
+    /// <summary>
+    /// Inserts an ACL record
+    /// </summary>
+    /// <typeparam name="TEntity">Type of entity that supports the ACL</typeparam>
+    /// <param name="entity">Entity</param>
+    /// <param name="customerRoleId">Customer role id</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertAclRecordAsync<TEntity>(TEntity entity, int customerRoleId) where TEntity : BaseEntity, IAclSupported
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        if (customerRoleId == 0)
+            throw new ArgumentOutOfRangeException(nameof(customerRoleId));
+
+        var entityId = entity.Id;
+        var entityName = entity.GetType().Name;
+
+        var aclRecord = new AclRecord
+        {
+            EntityId = entityId,
+            EntityName = entityName,
+            CustomerRoleId = customerRoleId
+        };
+
+        await InsertAclRecordAsync(aclRecord);
+    }
+
+    /// <summary>
+    /// Find customer role identifiers with granted access
+    /// </summary>
+    /// <typeparam name="TEntity">Type of entity that supports the ACL</typeparam>
+    /// <param name="entity">Entity</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the customer role identifiers
+    /// </returns>
+    public virtual async Task<int[]> GetCustomerRoleIdsWithAccessAsync<TEntity>(TEntity entity) where TEntity : BaseEntity, IAclSupported
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var entityId = entity.Id;
+        var entityName = entity.GetType().Name;
+
+        var key = _staticCacheManager.PrepareKeyForDefaultCache(NopSecurityDefaults.AclRecordCacheKey, entityId, entityName);
+
+        var query = from ur in _aclRecordRepository.Table
+            where ur.EntityId == entityId &&
+                  ur.EntityName == entityName
+            select ur.CustomerRoleId;
+
+        return await _staticCacheManager.GetAsync(key, () => query.ToArray());
+    }
+
+    /// <summary>
+    /// Authorize ACL permission
+    /// </summary>
+    /// <typeparam name="TEntity">Type of entity that supports the ACL</typeparam>
+    /// <param name="entity">Entity</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains true - authorized; otherwise, false
+    /// </returns>
+    public virtual async Task<bool> AuthorizeAsync<TEntity>(TEntity entity) where TEntity : BaseEntity, IAclSupported
+    {
+        return await AuthorizeAsync(entity, await _workContext.GetCurrentCustomerAsync());
+    }
+
+    /// <summary>
+    /// Authorize ACL permission
+    /// </summary>
+    /// <typeparam name="TEntity">Type of entity that supports the ACL</typeparam>
+    /// <param name="entity">Entity</param>
+    /// <param name="customer">Customer</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains true - authorized; otherwise, false
+    /// </returns>
+    public virtual async Task<bool> AuthorizeAsync<TEntity>(TEntity entity, Customer customer) where TEntity : BaseEntity, IAclSupported
+    {
+        if (entity == null)
+            return false;
+
+        if (customer == null)
+            return false;
+
+        if (_catalogSettings.IgnoreAcl)
+            return true;
+
+        if (!entity.SubjectToAcl)
+            return true;
+
+        foreach (var role1 in await _customerService.GetCustomerRolesAsync(customer))
+        foreach (var role2Id in await GetCustomerRoleIdsWithAccessAsync(entity))
+            if (role1.Id == role2Id)
+                //yes, we have such permission
+                return true;
+
+        //no permission found
+        return false;
+    }
+
+    #endregion
 }

@@ -1,29 +1,27 @@
-﻿using System.Web.Mvc;
-using FluentValidation.Attributes;
-using Nop.Web.Framework;
-using Nop.Web.Framework.Mvc;
-using Nop.Web.Validators.Common;
+﻿using System.ComponentModel.DataAnnotations;
+using Nop.Web.Framework.Models;
+using Nop.Web.Framework.Mvc.ModelBinding;
 
-namespace Nop.Web.Models.Common
+namespace Nop.Web.Models.Common;
+
+public partial record ContactUsModel : BaseNopModel
 {
-    [Validator(typeof(ContactUsValidator))]
-    public partial class ContactUsModel : BaseNopModel
-    {
-        [AllowHtml]
-        [NopResourceDisplayName("ContactUs.Email")]
-        public string Email { get; set; }
+    [DataType(DataType.EmailAddress)]
+    [NopResourceDisplayName("ContactUs.Email")]
+    public string Email { get; set; }
 
-        [AllowHtml]
-        [NopResourceDisplayName("ContactUs.Enquiry")]
-        public string Enquiry { get; set; }
+    [NopResourceDisplayName("ContactUs.Subject")]
+    public string Subject { get; set; }
+    public bool SubjectEnabled { get; set; }
 
-        [AllowHtml]
-        [NopResourceDisplayName("ContactUs.FullName")]
-        public string FullName { get; set; }
+    [NopResourceDisplayName("ContactUs.Enquiry")]
+    public string Enquiry { get; set; }
 
-        public bool SuccessfullySent { get; set; }
-        public string Result { get; set; }
+    [NopResourceDisplayName("ContactUs.FullName")]
+    public string FullName { get; set; }
 
-        public bool DisplayCaptcha { get; set; }
-    }
+    public bool SuccessfullySent { get; set; }
+    public string Result { get; set; }
+
+    public bool DisplayCaptcha { get; set; }
 }

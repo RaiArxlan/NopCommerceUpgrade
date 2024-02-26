@@ -1,114 +1,91 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using Nop.Core.Data;
-using Nop.Core.Domain.Catalog;
-using Nop.Services.Events;
+﻿using Nop.Core.Domain.Catalog;
+using Nop.Data;
 
-namespace Nop.Services.Catalog
+namespace Nop.Services.Catalog;
+
+/// <summary>
+/// Category template service
+/// </summary>
+public partial class CategoryTemplateService : ICategoryTemplateService
 {
-    /// <summary>
-    /// Category template service
-    /// </summary>
-    public partial class CategoryTemplateService : ICategoryTemplateService
+    #region Fields
+
+    protected readonly IRepository<CategoryTemplate> _categoryTemplateRepository;
+
+    #endregion
+
+    #region Ctor
+
+    public CategoryTemplateService(IRepository<CategoryTemplate> categoryTemplateRepository)
     {
-        #region Fields
-
-        private readonly IRepository<CategoryTemplate> _categoryTemplateRepository;
-        private readonly IEventPublisher _eventPublisher;
-
-        #endregion
-        
-        #region Ctor
-
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="categoryTemplateRepository">Category template repository</param>
-        /// <param name="eventPublisher">Event published</param>
-        public CategoryTemplateService(IRepository<CategoryTemplate> categoryTemplateRepository, 
-            IEventPublisher eventPublisher)
-        {
-            _categoryTemplateRepository = categoryTemplateRepository;
-            _eventPublisher = eventPublisher;
-        }
-
-        #endregion
-
-        #region Methods
-
-        /// <summary>
-        /// Delete category template
-        /// </summary>
-        /// <param name="categoryTemplate">Category template</param>
-        public virtual void DeleteCategoryTemplate(CategoryTemplate categoryTemplate)
-        {
-            if (categoryTemplate == null)
-                throw new ArgumentNullException("categoryTemplate");
-
-            _categoryTemplateRepository.Delete(categoryTemplate);
-
-            //event notification
-            _eventPublisher.EntityDeleted(categoryTemplate);
-        }
-
-        /// <summary>
-        /// Gets all category templates
-        /// </summary>
-        /// <returns>Category templates</returns>
-        public virtual IList<CategoryTemplate> GetAllCategoryTemplates()
-        {
-            var query = from pt in _categoryTemplateRepository.Table
-                        orderby pt.DisplayOrder
-                        select pt;
-
-            var templates = query.ToList();
-            return templates;
-        }
- 
-        /// <summary>
-        /// Gets a category template
-        /// </summary>
-        /// <param name="categoryTemplateId">Category template identifier</param>
-        /// <returns>Category template</returns>
-        public virtual CategoryTemplate GetCategoryTemplateById(int categoryTemplateId)
-        {
-            if (categoryTemplateId == 0)
-                return null;
-
-            return _categoryTemplateRepository.GetById(categoryTemplateId);
-        }
-
-        /// <summary>
-        /// Inserts category template
-        /// </summary>
-        /// <param name="categoryTemplate">Category template</param>
-        public virtual void InsertCategoryTemplate(CategoryTemplate categoryTemplate)
-        {
-            if (categoryTemplate == null)
-                throw new ArgumentNullException("categoryTemplate");
-
-            _categoryTemplateRepository.Insert(categoryTemplate);
-
-            //event notification
-            _eventPublisher.EntityInserted(categoryTemplate);
-        }
-
-        /// <summary>
-        /// Updates the category template
-        /// </summary>
-        /// <param name="categoryTemplate">Category template</param>
-        public virtual void UpdateCategoryTemplate(CategoryTemplate categoryTemplate)
-        {
-            if (categoryTemplate == null)
-                throw new ArgumentNullException("categoryTemplate");
-
-            _categoryTemplateRepository.Update(categoryTemplate);
-
-            //event notification
-            _eventPublisher.EntityUpdated(categoryTemplate);
-        }
-        
-        #endregion
+        _categoryTemplateRepository = categoryTemplateRepository;
     }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Delete category template
+    /// </summary>
+    /// <param name="categoryTemplate">Category template</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteCategoryTemplateAsync(CategoryTemplate categoryTemplate)
+    {
+        await _categoryTemplateRepository.DeleteAsync(categoryTemplate);
+    }
+
+    /// <summary>
+    /// Gets all category templates
+    /// </summary>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the category templates
+    /// </returns>
+    public virtual async Task<IList<CategoryTemplate>> GetAllCategoryTemplatesAsync()
+    {
+        var templates = await _categoryTemplateRepository.GetAllAsync(query =>
+        {
+            return from pt in query
+                orderby pt.DisplayOrder, pt.Id
+                select pt;
+        }, cache => default);
+
+        return templates;
+    }
+
+    /// <summary>
+    /// Gets a category template
+    /// </summary>
+    /// <param name="categoryTemplateId">Category template identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the category template
+    /// </returns>
+    public virtual async Task<CategoryTemplate> GetCategoryTemplateByIdAsync(int categoryTemplateId)
+    {
+        return await _categoryTemplateRepository.GetByIdAsync(categoryTemplateId, cache => default);
+    }
+
+    /// <summary>
+    /// Inserts category template
+    /// </summary>
+    /// <param name="categoryTemplate">Category template</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertCategoryTemplateAsync(CategoryTemplate categoryTemplate)
+    {
+        await _categoryTemplateRepository.InsertAsync(categoryTemplate);
+    }
+
+    /// <summary>
+    /// Updates the category template
+    /// </summary>
+    /// <param name="categoryTemplate">Category template</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task UpdateCategoryTemplateAsync(CategoryTemplate categoryTemplate)
+    {
+        await _categoryTemplateRepository.UpdateAsync(categoryTemplate);
+    }
+
+    #endregion
 }

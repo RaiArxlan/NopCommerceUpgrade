@@ -1,140 +1,156 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Web;
+﻿using Microsoft.AspNetCore.Http;
+using Nop.Core;
 using Nop.Core.Domain.Catalog;
+using Nop.Core.Http;
+using Nop.Core.Security;
 
-namespace Nop.Services.Catalog
+namespace Nop.Services.Catalog;
+
+/// <summary>
+/// Recently viewed products service
+/// </summary>
+public partial class RecentlyViewedProductsService : IRecentlyViewedProductsService
 {
-    /// <summary>
-    /// Recently viewed products service
-    /// </summary>
-    public partial class RecentlyViewedProductsService : IRecentlyViewedProductsService
+    #region Fields
+
+    protected readonly CatalogSettings _catalogSettings;
+    protected readonly CookieSettings _cookieSettings;
+    protected readonly IHttpContextAccessor _httpContextAccessor;
+    protected readonly IProductService _productService;
+    protected readonly IWebHelper _webHelper;
+    private static readonly char[] _separator = [','];
+
+    #endregion
+
+    #region Ctor
+
+    public RecentlyViewedProductsService(CatalogSettings catalogSettings,
+        CookieSettings cookieSettings,
+        IHttpContextAccessor httpContextAccessor,
+        IProductService productService,
+        IWebHelper webHelper)
     {
-        #region Fields
-
-        private readonly HttpContextBase _httpContext;
-        private readonly IProductService _productService;
-        private readonly CatalogSettings _catalogSettings;
-
-        #endregion
-
-        #region Ctor
-        
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="httpContext">HTTP context</param>
-        /// <param name="productService">Product service</param>
-        /// <param name="catalogSettings">Catalog settings</param>
-        public RecentlyViewedProductsService(HttpContextBase httpContext, IProductService productService,
-            CatalogSettings catalogSettings)
-        {
-            this._httpContext = httpContext;
-            this._productService = productService;
-            this._catalogSettings = catalogSettings;
-        }
-
-        #endregion
-
-        #region Utilities
-
-        /// <summary>
-        /// Gets a "recently viewed products" identifier list
-        /// </summary>
-        /// <returns>"recently viewed products" list</returns>
-        protected IList<int> GetRecentlyViewedProductsIds()
-        {
-            return GetRecentlyViewedProductsIds(int.MaxValue);
-        }
-
-        /// <summary>
-        /// Gets a "recently viewed products" identifier list
-        /// </summary>
-        /// <param name="number">Number of products to load</param>
-        /// <returns>"recently viewed products" list</returns>
-        protected IList<int> GetRecentlyViewedProductsIds(int number)
-        {
-            var productIds = new List<int>();
-            var recentlyViewedCookie = _httpContext.Request.Cookies.Get("NopCommerce.RecentlyViewedProducts");
-            if (recentlyViewedCookie == null)
-                return productIds;
-            string[] values = recentlyViewedCookie.Values.GetValues("RecentlyViewedProductIds");
-            if (values == null)
-                return productIds;
-            foreach (string productId in values)
-            {
-                int prodId = int.Parse(productId);
-                if (!productIds.Contains(prodId))
-                {
-                    productIds.Add(prodId);
-                    if (productIds.Count >= number)
-                        break;
-                }
-
-            }
-
-            return productIds;
-        }
-
-        #endregion
-
-        #region Methods
-
-
-        /// <summary>
-        /// Gets a "recently viewed products" list
-        /// </summary>
-        /// <param name="number">Number of products to load</param>
-        /// <returns>"recently viewed products" list</returns>
-        public virtual IList<Product> GetRecentlyViewedProducts(int number)
-        {
-            var products = new List<Product>();
-            var productIds = GetRecentlyViewedProductsIds(number);
-            foreach (var product in _productService.GetProductsByIds(productIds.ToArray()))
-                if (product.Published && !product.Deleted)
-                    products.Add(product);
-            return products;
-        }
-
-        /// <summary>
-        /// Adds a product to a recently viewed products list
-        /// </summary>
-        /// <param name="productId">Product identifier</param>
-        public virtual void AddProductToRecentlyViewedList(int productId)
-        {
-            if (!_catalogSettings.RecentlyViewedProductsEnabled)
-                return;
-
-            var oldProductIds = GetRecentlyViewedProductsIds();
-            var newProductIds = new List<int>();
-            newProductIds.Add(productId);
-            foreach (int oldProductId in oldProductIds)
-                if (oldProductId != productId)
-                    newProductIds.Add(oldProductId);
-
-            var recentlyViewedCookie = _httpContext.Request.Cookies.Get("NopCommerce.RecentlyViewedProducts");
-            if (recentlyViewedCookie == null)
-            {
-                recentlyViewedCookie = new HttpCookie("NopCommerce.RecentlyViewedProducts");
-                recentlyViewedCookie.HttpOnly = true;
-            }
-            recentlyViewedCookie.Values.Clear();
-            int maxProducts = _catalogSettings.RecentlyViewedProductsNumber;
-            if (maxProducts <= 0)
-                maxProducts = 10;
-            int i = 1;
-            foreach (int newProductId in newProductIds)
-            {
-                recentlyViewedCookie.Values.Add("RecentlyViewedProductIds", newProductId.ToString());
-                if (i == maxProducts)
-                    break;
-                i++;
-            }
-            recentlyViewedCookie.Expires = DateTime.Now.AddDays(10.0);
-            _httpContext.Response.Cookies.Set(recentlyViewedCookie);
-        }
-        
-        #endregion
+        _catalogSettings = catalogSettings;
+        _cookieSettings = cookieSettings;
+        _httpContextAccessor = httpContextAccessor;
+        _productService = productService;
+        _webHelper = webHelper;
     }
+
+    #endregion
+
+    #region Utilities
+
+    /// <summary>
+    /// Gets a list of identifier of recently viewed products
+    /// </summary>
+    /// <returns>List of identifier</returns>
+    protected List<int> GetRecentlyViewedProductsIds()
+    {
+        return GetRecentlyViewedProductsIds(int.MaxValue);
+    }
+
+    /// <summary>
+    /// Gets a list of identifier of recently viewed products
+    /// </summary>
+    /// <param name="number">Number of products to load</param>
+    /// <returns>List of identifier</returns>
+    protected List<int> GetRecentlyViewedProductsIds(int number)
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.Request == null)
+            return new List<int>();
+
+        //try to get cookie
+        var cookieName = $"{NopCookieDefaults.Prefix}{NopCookieDefaults.RecentlyViewedProductsCookie}";
+        if (!httpContext.Request.Cookies.TryGetValue(cookieName, out var productIdsCookie) || string.IsNullOrEmpty(productIdsCookie))
+            return new List<int>();
+
+        //get array of string product identifiers from cookie
+        var productIds = productIdsCookie.Split(_separator, StringSplitOptions.RemoveEmptyEntries);
+
+        //return list of int product identifiers
+        return productIds.Select(int.Parse).Distinct().Take(number).ToList();
+    }
+
+    /// <summary>
+    /// Add cookie value for the recently viewed products
+    /// </summary>
+    /// <param name="recentlyViewedProductIds">Collection of the recently viewed products identifiers</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    protected virtual Task AddRecentlyViewedProductsCookieAsync(IEnumerable<int> recentlyViewedProductIds)
+    {
+        //delete current cookie if exists
+        var cookieName = $"{NopCookieDefaults.Prefix}{NopCookieDefaults.RecentlyViewedProductsCookie}";
+        _httpContextAccessor.HttpContext.Response.Cookies.Delete(cookieName);
+
+        //create cookie value
+        var productIdsCookie = string.Join(",", recentlyViewedProductIds);
+
+        //create cookie options 
+        var cookieExpires = _cookieSettings.RecentlyViewedProductsCookieExpires;
+        var cookieOptions = new CookieOptions
+        {
+            Expires = DateTime.Now.AddHours(cookieExpires),
+            HttpOnly = true,
+            Secure = _webHelper.IsCurrentConnectionSecured()
+        };
+
+        //add cookie
+        _httpContextAccessor.HttpContext.Response.Cookies.Append(cookieName, productIdsCookie, cookieOptions);
+
+        return Task.CompletedTask;
+    }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Gets a "recently viewed products" list
+    /// </summary>
+    /// <param name="number">Number of products to load</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the "recently viewed products" list
+    /// </returns>
+    public virtual async Task<IList<Product>> GetRecentlyViewedProductsAsync(int number)
+    {
+        //get list of recently viewed product identifiers
+        var productIds = GetRecentlyViewedProductsIds(number);
+
+        //return list of product
+        return (await _productService.GetProductsByIdsAsync(productIds.ToArray()))
+            .Where(product => product.Published && !product.Deleted).ToList();
+    }
+
+    /// <summary>
+    /// Adds a product to a recently viewed products list
+    /// </summary>
+    /// <param name="productId">Product identifier</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task AddProductToRecentlyViewedListAsync(int productId)
+    {
+        if (_httpContextAccessor.HttpContext?.Response == null)
+            return;
+
+        //whether recently viewed products is enabled
+        if (!_catalogSettings.RecentlyViewedProductsEnabled)
+            return;
+
+        //get list of recently viewed product identifiers
+        var productIds = GetRecentlyViewedProductsIds();
+
+        //whether product identifier to add already exist
+        if (!productIds.Contains(productId))
+            productIds.Insert(0, productId);
+
+        //limit list based on the allowed number of the recently viewed products
+        productIds = productIds.Take(_catalogSettings.RecentlyViewedProductsNumber).ToList();
+
+        //set cookie
+        await AddRecentlyViewedProductsCookieAsync(productIds);
+    }
+
+    #endregion
 }

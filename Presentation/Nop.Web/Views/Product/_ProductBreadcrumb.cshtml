@@ -1,40 +1,48 @@
-﻿@model ProductDetailsModel.ProductBreadcrumbModel
-@using Nop.Core.Domain.Common;
-@using Nop.Core.Infrastructure;
-@using Nop.Web.Models.Catalog;
+@model ProductDetailsModel.ProductBreadcrumbModel
+
+@using Nop.Core.Domain.Catalog
+@using Nop.Core.Domain.Common
+@using Nop.Core.Domain.Seo
+
+@inject CommonSettings commonSettings
+@inject SeoSettings seoSettings
+
 @{
-    var breadcrumbDelimiter = EngineContext.Current.Resolve<CommonSettings>().BreadcrumbDelimiter;
+    var breadcrumbDelimiter = commonSettings.BreadcrumbDelimiter;
 }
 @if (Model.Enabled)
 {
     <div class="breadcrumb">
         <ul>
-            @Html.Widget("productbreadcrumb_before", Model.ProductId)
+            @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.ProductBreadcrumbBefore, additionalData = Model })
             <li>
-                <span itemscope itemtype="http://data-vocabulary.org/Breadcrumb">
-                    <a href="@Url.RouteUrl("HomePage")" itemprop="url">
-                        <span itemprop="title">@T("Products.Breadcrumb.Top")</span>
+                <span>
+                    <a href="@Url.RouteUrl("Homepage")">
+                        <span>@T("Products.Breadcrumb.Top")</span>
                     </a>
                 </span>
                 <span class="delimiter">@breadcrumbDelimiter</span>
-            </li>
+            </li>            
             @foreach (var category in Model.CategoryBreadcrumb)
             {
                 <li>
-                    <span itemscope itemtype="http://data-vocabulary.org/Breadcrumb">
-                        <a href="@Url.RouteUrl("Category", new { SeName = category.SeName })" itemprop="url">
-                            <span itemprop="title">@category.Name</span>
-                        </a>
-                    </span>
+                    <a href="@(Url.RouteUrl<Category>(new { SeName = category.SeName }))">
+                        <span>@category.Name</span>
+                    </a>
                     <span class="delimiter">@breadcrumbDelimiter</span>
                 </li>
             }
             <li>
                 <strong class="current-item">@Model.ProductName</strong>
-                @*<strong class="current-item"><a href="@Url.RouteUrl("Product", new { SeName = Model.ProductSeName })" itemprop="url">@Model.ProductName</a></strong>*@
-                @Html.Widget("productbreadcrumb_after", Model.ProductId)
+                <span id="@(Url.RouteUrl<Product>(new { SeName = Model.ProductSeName }))"></span>              
+                @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.ProductBreadcrumbAfter, additionalData = Model })
             </li>
         </ul>
+        @if (seoSettings.MicrodataEnabled)
+        {
+            <script type="application/ld+json">
+                @Html.Raw(Model.JsonLd)
+            </script>
+        }
     </div>
-
 }

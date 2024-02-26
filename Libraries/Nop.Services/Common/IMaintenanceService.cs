@@ -1,24 +1,26 @@
-using Nop.Core;
+﻿namespace Nop.Services.Common;
 
-namespace Nop.Services.Common
+/// <summary>
+///  Maintenance service interface
+/// </summary>
+public partial interface IMaintenanceService
 {
     /// <summary>
-    ///  Maintenance service interface
+    /// Gets all backup files
     /// </summary>
-    public partial interface IMaintenanceService
-    {
-        /// <summary>
-        /// Get the current ident value
-        /// </summary>
-        /// <typeparam name="T">Entity</typeparam>
-        /// <returns>Integer ident; null if cannot get the result</returns>
-        int? GetTableIdent<T>() where T : BaseEntity;
+    /// <returns>Backup file collection</returns>
+    IList<string> GetAllBackupFiles();
 
-        /// <summary>
-        /// Set table ident (is supported)
-        /// </summary>
-        /// <typeparam name="T">Entity</typeparam>
-        /// <param name="ident">Ident value</param>
-        void SetTableIdent<T>(int ident) where T : BaseEntity;
-    }
+    /// <summary>
+    /// Creates a path to a new database backup file
+    /// </summary>
+    /// <returns>Path to a new database backup file</returns>
+    string CreateNewBackupFilePath();
+
+    /// <summary>
+    /// Returns the path to the backup file
+    /// </summary>
+    /// <param name="backupFileName">The name of the backup file</param>
+    /// <returns>The path to the backup file</returns>
+    string GetBackupPath(string backupFileName);
 }

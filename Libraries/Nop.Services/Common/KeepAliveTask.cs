@@ -1,31 +1,36 @@
-﻿using System.Net;
-using Nop.Core;
-using Nop.Services.Tasks;
+﻿using Nop.Services.ScheduleTasks;
 
-namespace Nop.Services.Common
+namespace Nop.Services.Common;
+
+/// <summary>
+/// Represents a task for keeping the site alive
+/// </summary>
+public partial class KeepAliveTask : IScheduleTask
 {
-    /// <summary>
-    /// Represents a task for keeping the site alive
-    /// </summary>
-    public partial class KeepAliveTask : ITask
+    #region Fields
+
+    protected readonly StoreHttpClient _storeHttpClient;
+
+    #endregion
+
+    #region Ctor
+
+    public KeepAliveTask(StoreHttpClient storeHttpClient)
     {
-        private readonly IStoreContext _storeContext;
-
-        public KeepAliveTask(IStoreContext storeContext)
-        {
-            this._storeContext = storeContext;
-        }
-
-        /// <summary>
-        /// Executes a task
-        /// </summary>
-        public void Execute()
-        {
-            string url = _storeContext.CurrentStore.Url + "keepalive/index";
-            using (var wc = new WebClient())
-            {
-                wc.DownloadString(url);
-            }
-        }
+        _storeHttpClient = storeHttpClient;
     }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Executes a task
+    /// </summary>
+    public async System.Threading.Tasks.Task ExecuteAsync()
+    {
+        await _storeHttpClient.KeepAliveAsync();
+    }
+
+    #endregion
 }

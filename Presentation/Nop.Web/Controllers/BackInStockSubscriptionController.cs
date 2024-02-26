@@ -1,207 +1,247 @@
-﻿using System;
-using System.Web.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Nop.Core;
 using Nop.Core.Domain.Catalog;
 using Nop.Core.Domain.Customers;
 using Nop.Services.Catalog;
+using Nop.Services.Customers;
 using Nop.Services.Localization;
+using Nop.Services.Messages;
 using Nop.Services.Seo;
+using Nop.Web.Framework.Mvc.Filters;
+using Nop.Web.Infrastructure;
 using Nop.Web.Models.Catalog;
 using Nop.Web.Models.Common;
 
-namespace Nop.Web.Controllers
+namespace Nop.Web.Controllers;
+
+[AutoValidateAntiforgeryToken]
+public partial class BackInStockSubscriptionController : BasePublicController
 {
-    public partial class BackInStockSubscriptionController : BasePublicController
+    #region Fields
+
+    protected readonly IBackInStockSubscriptionService _backInStockSubscriptionService;
+    protected readonly CatalogSettings _catalogSettings;
+    protected readonly CustomerSettings _customerSettings;
+    protected readonly ICustomerService _customerService;
+    protected readonly ILocalizationService _localizationService;
+    protected readonly INotificationService _notificationService;
+    protected readonly IProductService _productService;
+    protected readonly IStoreContext _storeContext;
+    protected readonly IUrlRecordService _urlRecordService;
+    protected readonly IWorkContext _workContext;
+
+    #endregion
+
+    #region Ctor
+
+    public BackInStockSubscriptionController(CatalogSettings catalogSettings,
+        CustomerSettings customerSettings,
+        IBackInStockSubscriptionService backInStockSubscriptionService,
+        ICustomerService customerService,
+        ILocalizationService localizationService,
+        INotificationService notificationService,
+        IProductService productService,
+        IStoreContext storeContext,
+        IUrlRecordService urlRecordService,
+        IWorkContext workContext)
     {
-		#region Fields
+        _catalogSettings = catalogSettings;
+        _customerSettings = customerSettings;
+        _backInStockSubscriptionService = backInStockSubscriptionService;
+        _customerService = customerService;
+        _localizationService = localizationService;
+        _notificationService = notificationService;
+        _productService = productService;
+        _storeContext = storeContext;
+        _urlRecordService = urlRecordService;
+        _workContext = workContext;
+    }
 
-        private readonly IProductService _productService;
-        private readonly IWorkContext _workContext;
-        private readonly IStoreContext _storeContext;
-        private readonly ILocalizationService _localizationService;
-        private readonly IBackInStockSubscriptionService _backInStockSubscriptionService;
-        private readonly CatalogSettings _catalogSettings;
-        private readonly CustomerSettings _customerSettings;
-        
-        #endregion
+    #endregion
 
-		#region Constructors
+    #region Methods
 
-        public BackInStockSubscriptionController(IProductService productService,
-            IWorkContext workContext, 
-            IStoreContext storeContext,
-            ILocalizationService localizationService,
-            IBackInStockSubscriptionService backInStockSubscriptionService,
-            CatalogSettings catalogSettings,
-            CustomerSettings customerSettings)
+    // Product details page > back in stock subscribe
+    [CheckLanguageSeoCode(ignore: true)]
+    public virtual async Task<IActionResult> SubscribePopup(int productId)
+    {
+        var product = await _productService.GetProductByIdAsync(productId);
+        if (product == null || product.Deleted)
+            throw new ArgumentException("No product found with the specified id");
+
+        var customer = await _workContext.GetCurrentCustomerAsync();
+        var store = await _storeContext.GetCurrentStoreAsync();
+        var model = new BackInStockSubscribeModel
         {
-            this._productService = productService;
-            this._workContext = workContext;
-            this._storeContext = storeContext;
-            this._localizationService = localizationService;
-            this._backInStockSubscriptionService = backInStockSubscriptionService;
-            this._catalogSettings = catalogSettings;
-            this._customerSettings = customerSettings;
+            ProductId = product.Id,
+            ProductName = await _localizationService.GetLocalizedAsync(product, x => x.Name),
+            ProductSeName = await _urlRecordService.GetSeNameAsync(product),
+            IsCurrentCustomerRegistered = await _customerService.IsRegisteredAsync(customer),
+            MaximumBackInStockSubscriptions = _catalogSettings.MaximumBackInStockSubscriptions,
+            CurrentNumberOfBackInStockSubscriptions = (await _backInStockSubscriptionService
+                    .GetAllSubscriptionsByCustomerIdAsync(customer.Id, store.Id, 0, 1))
+                .TotalCount
+        };
+        if (product.ManageInventoryMethod == ManageInventoryMethod.ManageStock &&
+            product.BackorderMode == BackorderMode.NoBackorders &&
+            product.AllowBackInStockSubscriptions &&
+            await _productService.GetTotalStockQuantityAsync(product) <= 0)
+        {
+            //out of stock
+            model.SubscriptionAllowed = true;
+            model.AlreadySubscribed = await _backInStockSubscriptionService
+                .FindSubscriptionAsync(customer.Id, product.Id, store.Id) != null;
         }
 
-        #endregion
+        return PartialView(model);
+    }
 
-        #region Methods
+    [HttpPost]
+    public virtual async Task<IActionResult> SubscribePopupPOST(int productId)
+    {
+        var product = await _productService.GetProductByIdAsync(productId);
+        if (product == null || product.Deleted)
+            throw new ArgumentException("No product found with the specified id");
 
-        // Product details page > back in stock subscribe
-        public ActionResult SubscribePopup(int productId)
+        var customer = await _workContext.GetCurrentCustomerAsync();
+        if (!await _customerService.IsRegisteredAsync(customer))
+            return Content(await _localizationService.GetResourceAsync("BackInStockSubscriptions.OnlyRegistered"));
+
+        if (product.ManageInventoryMethod == ManageInventoryMethod.ManageStock &&
+            product.BackorderMode == BackorderMode.NoBackorders &&
+            product.AllowBackInStockSubscriptions &&
+            await _productService.GetTotalStockQuantityAsync(product) <= 0)
         {
-            var product = _productService.GetProductById(productId);
-            if (product == null || product.Deleted)
-                throw new ArgumentException("No product found with the specified id");
-
-            var model = new BackInStockSubscribeModel();
-            model.ProductId = product.Id;
-            model.ProductName = product.GetLocalized(x => x.Name);
-            model.ProductSeName = product.GetSeName();
-            model.IsCurrentCustomerRegistered = _workContext.CurrentCustomer.IsRegistered();
-            model.MaximumBackInStockSubscriptions = _catalogSettings.MaximumBackInStockSubscriptions;
-            model.CurrentNumberOfBackInStockSubscriptions = _backInStockSubscriptionService
-                .GetAllSubscriptionsByCustomerId(_workContext.CurrentCustomer.Id, _storeContext.CurrentStore.Id, 0, 1)
-                .TotalCount;
-            if (product.ManageInventoryMethod == ManageInventoryMethod.ManageStock &&
-                product.BackorderMode == BackorderMode.NoBackorders &&
-                product.AllowBackInStockSubscriptions &&
-                product.GetTotalStockQuantity() <= 0)
+            //out of stock
+            var store = await _storeContext.GetCurrentStoreAsync();
+            var subscription = await _backInStockSubscriptionService
+                .FindSubscriptionAsync(customer.Id, product.Id, store.Id);
+            if (subscription != null)
             {
-                //out of stock
-                model.SubscriptionAllowed = true;
-                model.AlreadySubscribed = _backInStockSubscriptionService
-                    .FindSubscription(_workContext.CurrentCustomer.Id, product.Id, _storeContext.CurrentStore.Id) != null;
+                //subscription already exists
+                //unsubscribe
+                await _backInStockSubscriptionService.DeleteSubscriptionAsync(subscription);
+
+                _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("BackInStockSubscriptions.Notification.Unsubscribed"));
+                return new OkResult();
             }
-            return View(model);
-        }
-        [HttpPost, ActionName("SubscribePopup")]
-        public ActionResult SubscribePopupPOST(int productId)
-        {
-            var product = _productService.GetProductById(productId);
-            if (product == null || product.Deleted)
-                throw new ArgumentException("No product found with the specified id");
 
-            if (!_workContext.CurrentCustomer.IsRegistered())
-                return Content(_localizationService.GetResource("BackInStockSubscriptions.OnlyRegistered"));
-
-            if (product.ManageInventoryMethod == ManageInventoryMethod.ManageStock &&
-                product.BackorderMode == BackorderMode.NoBackorders &&
-                product.AllowBackInStockSubscriptions &&
-                product.GetTotalStockQuantity() <= 0)
+            //subscription does not exist
+            //subscribe
+            if ((await _backInStockSubscriptionService
+                    .GetAllSubscriptionsByCustomerIdAsync(customer.Id, store.Id, 0, 1))
+                .TotalCount >= _catalogSettings.MaximumBackInStockSubscriptions)
             {
-                //out of stock
-                var subscription = _backInStockSubscriptionService
-                    .FindSubscription(_workContext.CurrentCustomer.Id, product.Id, _storeContext.CurrentStore.Id);
-                if (subscription != null)
+                return Json(new
                 {
-                    //subscription already exists
-                    //unsubscribe
-                    _backInStockSubscriptionService.DeleteSubscription(subscription);
-                    return Content("Unsubscribed");
-                }
-
-                //subscription does not exist
-                //subscribe
-                if (_backInStockSubscriptionService
-                    .GetAllSubscriptionsByCustomerId(_workContext.CurrentCustomer.Id, _storeContext.CurrentStore.Id, 0, 1)
-                    .TotalCount >= _catalogSettings.MaximumBackInStockSubscriptions)
-                {
-                    return Content(string.Format(_localizationService.GetResource("BackInStockSubscriptions.MaxSubscriptions"), _catalogSettings.MaximumBackInStockSubscriptions));
-                }
-                subscription = new BackInStockSubscription
-                {
-                    Customer = _workContext.CurrentCustomer,
-                    Product = product,
-                    StoreId = _storeContext.CurrentStore.Id,
-                    CreatedOnUtc = DateTime.UtcNow
-                };
-                _backInStockSubscriptionService.InsertSubscription(subscription);
-                return Content("Subscribed");
+                    result = string.Format(await _localizationService.GetResourceAsync("BackInStockSubscriptions.MaxSubscriptions"), _catalogSettings.MaximumBackInStockSubscriptions)
+                });
             }
-
-            //subscription not possible
-            return Content(_localizationService.GetResource("BackInStockSubscriptions.NotAllowed"));
-        }
-
-
-        // My account / Back in stock subscriptions
-        public ActionResult CustomerSubscriptions(int? page)
-        {
-            if (_customerSettings.HideBackInStockSubscriptionsTab)
+            subscription = new BackInStockSubscription
             {
-                return RedirectToRoute("CustomerInfo");
-            }
-
-            int pageIndex = 0;
-            if (page > 0)
-            {
-                pageIndex = page.Value - 1;
-            }
-            var pageSize = 10;
-
-            var customer = _workContext.CurrentCustomer;
-            var list = _backInStockSubscriptionService.GetAllSubscriptionsByCustomerId(customer.Id,
-                _storeContext.CurrentStore.Id, pageIndex, pageSize);
-
-            var model = new CustomerBackInStockSubscriptionsModel();
-
-            foreach (var subscription in list)
-            {
-                var product = subscription.Product;
-
-                if (product != null)
-                {
-                    var subscriptionModel = new CustomerBackInStockSubscriptionsModel.BackInStockSubscriptionModel
-                    {
-                        Id = subscription.Id,
-                        ProductId = product.Id,
-                        ProductName = product.GetLocalized(x => x.Name),
-                        SeName = product.GetSeName(),
-                    };
-                    model.Subscriptions.Add(subscriptionModel);
-                }
-            }
-
-            model.PagerModel = new PagerModel
-            {
-                PageSize = list.PageSize,
-                TotalRecords = list.TotalCount,
-                PageIndex = list.PageIndex,
-                ShowTotalSummary = false,
-                RouteActionName = "CustomerBackInStockSubscriptionsPaged",
-                UseRouteLinks = true,
-                RouteValues = new BackInStockSubscriptionsRouteValues { page = pageIndex }
+                CustomerId = customer.Id,
+                ProductId = product.Id,
+                StoreId = store.Id,
+                CreatedOnUtc = DateTime.UtcNow
             };
+            await _backInStockSubscriptionService.InsertSubscriptionAsync(subscription);
 
-            return View(model);
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("BackInStockSubscriptions.Notification.Subscribed"));
+            return new OkResult();
         }
-        [HttpPost, ActionName("CustomerSubscriptions")]
-        public ActionResult CustomerSubscriptionsPOST(FormCollection formCollection)
-        {
-            foreach (var key in formCollection.AllKeys)
-            {
-                var value = formCollection[key];
 
-                if (value.Equals("on") && key.StartsWith("biss", StringComparison.InvariantCultureIgnoreCase))
+        //subscription not possible
+        return Content(await _localizationService.GetResourceAsync("BackInStockSubscriptions.NotAllowed"));
+    }
+
+    // My account / Back in stock subscriptions
+    public virtual async Task<IActionResult> CustomerSubscriptions(int? pageNumber)
+    {
+        if (_customerSettings.HideBackInStockSubscriptionsTab)
+        {
+            return RedirectToRoute("CustomerInfo");
+        }
+
+        var pageIndex = 0;
+        if (pageNumber > 0)
+        {
+            pageIndex = pageNumber.Value - 1;
+        }
+        var pageSize = 10;
+
+        var customer = await _workContext.GetCurrentCustomerAsync();
+        var store = await _storeContext.GetCurrentStoreAsync();
+        var list = await _backInStockSubscriptionService.GetAllSubscriptionsByCustomerIdAsync(customer.Id,
+            store.Id, pageIndex, pageSize);
+
+        var model = new CustomerBackInStockSubscriptionsModel();
+
+        foreach (var subscription in list)
+        {
+            var product = await _productService.GetProductByIdAsync(subscription.ProductId);
+
+            if (product != null)
+            {
+                var subscriptionModel = new CustomerBackInStockSubscriptionsModel.BackInStockSubscriptionModel
                 {
-                    var id = key.Replace("biss", "").Trim();
-                    int subscriptionId;
-                    if (Int32.TryParse(id, out subscriptionId))
+                    Id = subscription.Id,
+                    ProductId = product.Id,
+                    ProductName = await _localizationService.GetLocalizedAsync(product, x => x.Name),
+                    SeName = await _urlRecordService.GetSeNameAsync(product),
+                };
+                model.Subscriptions.Add(subscriptionModel);
+            }
+        }
+
+        model.PagerModel = new PagerModel(_localizationService)
+        {
+            PageSize = list.PageSize,
+            TotalRecords = list.TotalCount,
+            PageIndex = list.PageIndex,
+            ShowTotalSummary = false,
+            RouteActionName = "CustomerBackInStockSubscriptions",
+            UseRouteLinks = true,
+            RouteValues = new BackInStockSubscriptionsRouteValues { PageNumber = pageIndex }
+        };
+
+        return View(model);
+    }
+
+    [HttpPost, ActionName("CustomerSubscriptions")]
+    public virtual async Task<IActionResult> CustomerSubscriptionsPOST(IFormCollection formCollection)
+    {
+        foreach (var key in formCollection.Keys)
+        {
+            var value = formCollection[key];
+
+            if (value.Equals("on") && key.StartsWith("biss", StringComparison.InvariantCultureIgnoreCase))
+            {
+                var id = key.Replace("biss", "").Trim();
+                if (int.TryParse(id, out var subscriptionId))
+                {
+                    var subscription = await _backInStockSubscriptionService.GetSubscriptionByIdAsync(subscriptionId);
+                    var customer = await _workContext.GetCurrentCustomerAsync();
+                    if (subscription != null && subscription.CustomerId == customer.Id)
                     {
-                        var subscription = _backInStockSubscriptionService.GetSubscriptionById(subscriptionId);
-                        if (subscription != null && subscription.CustomerId == _workContext.CurrentCustomer.Id)
-                        {
-                            _backInStockSubscriptionService.DeleteSubscription(subscription);
-                        }
+                        await _backInStockSubscriptionService.DeleteSubscriptionAsync(subscription);
                     }
                 }
             }
-
-            return RedirectToRoute("CustomerBackInStockSubscriptions");
         }
 
-        #endregion
+        return RedirectToRoute("CustomerBackInStockSubscriptions");
     }
+
+    #endregion
+
+    #region Nested class
+
+    /// <summary>
+    /// record that has only page for route value. Used for (My Account) Back in stock subscriptions pagination
+    /// </summary>
+    public partial record BackInStockSubscriptionsRouteValues : BaseRouteValues
+    {
+    }
+
+    #endregion
 }

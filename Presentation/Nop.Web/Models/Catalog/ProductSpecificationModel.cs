@@ -1,14 +1,27 @@
-﻿using Nop.Web.Framework.Mvc;
+﻿using Nop.Web.Framework.Models;
 
-namespace Nop.Web.Models.Catalog
+namespace Nop.Web.Models.Catalog;
+
+/// <summary>
+/// Represents a product specification model
+/// </summary>
+public partial record ProductSpecificationModel : BaseNopModel
 {
-    public partial class ProductSpecificationModel : BaseNopModel
+    #region Properties
+
+    /// <summary>
+    /// Gets or sets the grouped specification attribute models
+    /// </summary>
+    public IList<ProductSpecificationAttributeGroupModel> Groups { get; set; }
+
+    #endregion
+
+    #region Ctor
+
+    public ProductSpecificationModel()
     {
-        public int SpecificationAttributeId { get; set; }
-
-        public string SpecificationAttributeName { get; set; }
-
-        //this value is already HTML encoded
-        public string ValueRaw { get; set; }
+        Groups = new List<ProductSpecificationAttributeGroupModel>();
     }
+
+    #endregion
 }

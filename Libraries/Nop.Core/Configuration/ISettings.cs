@@ -1,7 +1,8 @@
-﻿
-namespace Nop.Core.Configuration
+﻿namespace Nop.Core.Configuration;
+
+/// <summary>
+/// Setting interface
+/// </summary>
+public partial interface ISettings
 {
-    public interface ISettings
-    {
-    }
 }

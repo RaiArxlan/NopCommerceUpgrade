@@ -1,27 +1,31 @@
-﻿using System.Collections.Generic;
+﻿namespace Nop.Services.Payments;
 
-namespace Nop.Services.Payments
+/// <summary>
+/// Cancel recurring payment result
+/// </summary>
+public partial class CancelRecurringPaymentResult
 {
-    /// <summary>
-    /// Represents a CancelRecurringPaymentResult
-    /// </summary>
-    public partial class CancelRecurringPaymentResult
+    public CancelRecurringPaymentResult()
     {
-        public IList<string> Errors { get; set; }
-
-        public CancelRecurringPaymentResult() 
-        {
-            this.Errors = new List<string>();
-        }
-
-        public bool Success
-        {
-            get { return (this.Errors.Count == 0); }
-        }
-
-        public void AddError(string error) 
-        {
-            this.Errors.Add(error);
-        }
+        Errors = new List<string>();
     }
+
+    /// <summary>
+    /// Gets a value indicating whether request has been completed successfully
+    /// </summary>
+    public bool Success => !Errors.Any();
+
+    /// <summary>
+    /// Add error
+    /// </summary>
+    /// <param name="error">Error</param>
+    public void AddError(string error)
+    {
+        Errors.Add(error);
+    }
+
+    /// <summary>
+    /// Errors
+    /// </summary>
+    public IList<string> Errors { get; set; }
 }

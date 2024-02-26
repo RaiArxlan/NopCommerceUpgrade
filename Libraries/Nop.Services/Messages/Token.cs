@@ -1,40 +1,65 @@
-﻿
-namespace Nop.Services.Messages
+﻿namespace Nop.Services.Messages;
+
+/// <summary>
+/// Represents token
+/// </summary>
+public sealed partial class Token
 {
-    public sealed class Token
+    #region Ctor
+
+    /// <summary>
+    /// Ctor
+    /// </summary>
+    /// <param name="key">Key</param>
+    /// <param name="value">Value</param>
+    public Token(string key, object value) : this(key, value, false)
     {
-        private readonly string _key;
-        private readonly string _value;
-        private readonly bool _neverHtmlEncoded;
-
-        public Token(string key, string value):
-            this(key, value, false)
-        {
-            
-        }
-        public Token(string key, string value, bool neverHtmlEncoded)
-        {
-            this._key = key;
-            this._value = value;
-            this._neverHtmlEncoded = neverHtmlEncoded;
-        }
-
-        /// <summary>
-        /// Token key
-        /// </summary>
-        public string Key { get { return _key; } }
-        /// <summary>
-        /// Token value
-        /// </summary>
-        public string Value { get { return _value; } }
-        /// <summary>
-        /// Indicates whether this token should not be HTML encoded
-        /// </summary>
-        public bool NeverHtmlEncoded { get { return _neverHtmlEncoded; } }
-
-        public override string ToString()
-        {
-            return string.Format("{0}: {1}", Key, Value);
-        }
     }
+
+    /// <summary>
+    /// Ctor
+    /// </summary>
+    /// <param name="key">Key</param>
+    /// <param name="value">Value</param>
+    /// <param name="neverHtmlEncoded">Indicates whether this token should not be HTML encoded</param>
+    public Token(string key, object value, bool neverHtmlEncoded)
+    {
+        Key = key;
+        Value = value;
+        NeverHtmlEncoded = neverHtmlEncoded;
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Token key
+    /// </summary>
+    public string Key { get; }
+
+    /// <summary>
+    /// Token value
+    /// </summary>
+    public object Value { get; }
+
+    /// <summary>
+    /// Indicates whether this token should not be HTML encoded
+    /// </summary>
+    public bool NeverHtmlEncoded { get; }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// The string representation of the value of this token
+    /// </summary>
+    /// <returns>String value</returns>
+    public override string ToString()
+    {
+        return $"{Key}: {Value}";
+    }
+
+    #endregion
 }

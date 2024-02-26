@@ -1,13 +1,12 @@
-﻿using Nop.Web.Framework.Mvc;
+﻿using Nop.Web.Framework.Models;
 
-namespace Nop.Web.Models.Catalog
+namespace Nop.Web.Models.Catalog;
+
+public partial record ProductTagModel : BaseNopEntityModel
 {
-    public partial class ProductTagModel : BaseNopEntityModel
-    {
-        public string Name { get; set; }
+    public string Name { get; set; }
 
-        public string SeName { get; set; }
+    public string SeName { get; set; }
 
-        public int ProductCount { get; set; }
-    }
+    public int ProductCount { get; set; }
 }

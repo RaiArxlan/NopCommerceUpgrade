@@ -1,87 +1,140 @@
-﻿using System.Collections.Generic;
-using System.Web.Mvc;
-using FluentValidation.Attributes;
-using Nop.Web.Framework;
-using Nop.Web.Framework.Mvc;
-using Nop.Web.Validators.Catalog;
+﻿using Nop.Web.Framework.Models;
+using Nop.Web.Framework.Mvc.ModelBinding;
 
-namespace Nop.Web.Models.Catalog
+namespace Nop.Web.Models.Catalog;
+
+public partial record ProductReviewOverviewModel : BaseNopModel
 {
-    public partial class ProductReviewOverviewModel : BaseNopModel
+    public int ProductId { get; set; }
+
+    public int RatingSum { get; set; }
+
+    public int TotalReviews { get; set; }
+
+    public bool AllowCustomerReviews { get; set; }
+
+    public bool CanAddNewReview { get; set; }
+}
+
+public partial record ProductReviewsModel : BaseNopModel
+{
+    public ProductReviewsModel()
     {
-        public int ProductId { get; set; }
-
-        public int RatingSum { get; set; }
-
-        public int TotalReviews { get; set; }
-
-        public bool AllowCustomerReviews { get; set; }
+        Items = new List<ProductReviewModel>();
+        AddProductReview = new AddProductReviewModel();
+        ReviewTypeList = new List<ReviewTypeModel>();
+        AddAdditionalProductReviewList = new List<AddProductReviewReviewTypeMappingModel>();
     }
 
-    [Validator(typeof(ProductReviewsValidator))]
-    public partial class ProductReviewsModel : BaseNopModel
+    public int ProductId { get; set; }
+
+    public IList<ProductReviewModel> Items { get; set; }
+
+    public AddProductReviewModel AddProductReview { get; set; }
+
+    public IList<ReviewTypeModel> ReviewTypeList { get; set; }
+
+    public IList<AddProductReviewReviewTypeMappingModel> AddAdditionalProductReviewList { get; set; }
+}
+
+public partial record ReviewTypeModel : BaseNopEntityModel
+{
+    public string Name { get; set; }
+
+    public string Description { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public bool IsRequired { get; set; }
+
+    public bool VisibleToAllCustomers { get; set; }
+
+    public double AverageRating { get; set; }
+}
+
+public partial record ProductReviewModel : BaseNopEntityModel
+{
+    public ProductReviewModel()
     {
-        public ProductReviewsModel()
-        {
-            Items = new List<ProductReviewModel>();
-            AddProductReview = new AddProductReviewModel();
-        }
-        public int ProductId { get; set; }
-
-        public string ProductName { get; set; }
-
-        public string ProductSeName { get; set; }
-
-        public IList<ProductReviewModel> Items { get; set; }
-        public AddProductReviewModel AddProductReview { get; set; }
+        AdditionalProductReviewList = new List<ProductReviewReviewTypeMappingModel>();
     }
 
-    public partial class ProductReviewModel : BaseNopEntityModel
-    {
-        public int CustomerId { get; set; }
+    public int CustomerId { get; set; }
 
-        public string CustomerName { get; set; }
+    public string CustomerAvatarUrl { get; set; }
 
-        public bool AllowViewingProfiles { get; set; }
-        
-        public string Title { get; set; }
+    public string CustomerName { get; set; }
 
-        public string ReviewText { get; set; }
+    public bool AllowViewingProfiles { get; set; }
 
-        public int Rating { get; set; }
+    public string Title { get; set; }
 
-        public ProductReviewHelpfulnessModel Helpfulness { get; set; }
+    public string ReviewText { get; set; }
 
-        public string WrittenOnStr { get; set; }
-    }
+    public string ReplyText { get; set; }
 
+    public int Rating { get; set; }
 
-    public partial class ProductReviewHelpfulnessModel : BaseNopModel
-    {
-        public int ProductReviewId { get; set; }
+    public string WrittenOnStr { get; set; }
 
-        public int HelpfulYesTotal { get; set; }
+    public ProductReviewHelpfulnessModel Helpfulness { get; set; }
 
-        public int HelpfulNoTotal { get; set; }
-    }
+    public IList<ProductReviewReviewTypeMappingModel> AdditionalProductReviewList { get; set; }
+}
 
-    public partial class AddProductReviewModel : BaseNopModel
-    {
-        [AllowHtml]
-        [NopResourceDisplayName("Reviews.Fields.Title")]
-        public string Title { get; set; }
+public partial record ProductReviewHelpfulnessModel : BaseNopModel
+{
+    public int ProductReviewId { get; set; }
 
-        [AllowHtml]
-        [NopResourceDisplayName("Reviews.Fields.ReviewText")]
-        public string ReviewText { get; set; }
+    public int HelpfulYesTotal { get; set; }
 
-        [NopResourceDisplayName("Reviews.Fields.Rating")]
-        public int Rating { get; set; }
+    public int HelpfulNoTotal { get; set; }
+}
 
-        public bool DisplayCaptcha { get; set; }
+public partial record AddProductReviewModel : BaseNopModel
+{
+    [NopResourceDisplayName("Reviews.Fields.Title")]
+    public string Title { get; set; }
 
-        public bool CanCurrentCustomerLeaveReview { get; set; }
-        public bool SuccessfullyAdded { get; set; }
-        public string Result { get; set; }
-    }
+    [NopResourceDisplayName("Reviews.Fields.ReviewText")]
+    public string ReviewText { get; set; }
+
+    [NopResourceDisplayName("Reviews.Fields.Rating")]
+    public int Rating { get; set; }
+
+    public bool DisplayCaptcha { get; set; }
+
+    public bool CanCurrentCustomerLeaveReview { get; set; }
+
+    public bool CanAddNewReview { get; set; }
+}
+
+public partial record AddProductReviewReviewTypeMappingModel : BaseNopEntityModel
+{
+    public int ProductReviewId { get; set; }
+
+    public int ReviewTypeId { get; set; }
+
+    public int Rating { get; set; }
+
+    public string Name { get; set; }
+
+    public string Description { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public bool IsRequired { get; set; }
+}
+
+public partial record ProductReviewReviewTypeMappingModel : BaseNopEntityModel
+{
+    public int ProductReviewId { get; set; }
+
+    public int ReviewTypeId { get; set; }
+
+    public int Rating { get; set; }
+
+    public string Name { get; set; }
+
+    public bool VisibleToAllCustomers { get; set; }
 }

@@ -1,27 +1,62 @@
-﻿using Nop.Web.Framework.Mvc;
+﻿using Nop.Web.Framework.Models;
 
-namespace Nop.Web.Models.Common
+namespace Nop.Web.Models.Common;
+
+public partial record FooterModel : BaseNopModel
 {
-    public partial class FooterModel : BaseNopModel
+    public FooterModel()
     {
-        public string StoreName { get; set; }
-        public string FacebookLink { get; set; }
-        public string TwitterLink { get; set; }
-        public string YoutubeLink { get; set; }
-        public string GooglePlusLink { get; set; }
-        public bool WishlistEnabled { get; set; }
-        public bool ShoppingCartEnabled { get; set; }
-        public bool HideAddresses { get; set; }
-        public bool HideOrders { get; set; }
-        public bool SitemapEnabled { get; set; }
-        public bool NewsEnabled { get; set; }
-        public bool BlogEnabled { get; set; }
-        public bool CompareProductsEnabled { get; set; }
-        public bool ForumEnabled { get; set; }
-        public bool AllowPrivateMessages { get; set; }
-        public bool RecentlyViewedProductsEnabled { get; set; }
-        public bool RecentlyAddedProductsEnabled { get; set; }
-        public bool DisplayTaxShippingInfoFooter { get; set; }
-        public int WorkingLanguageId { get; set; }
+        Topics = new List<FooterTopicModel>();
     }
+
+    public string StoreName { get; set; }
+    public bool IsHomePage { get; set; }
+    public bool WishlistEnabled { get; set; }
+    public bool ShoppingCartEnabled { get; set; }
+    public bool SitemapEnabled { get; set; }
+    public bool SearchEnabled { get; set; }
+    public bool NewsEnabled { get; set; }
+    public bool BlogEnabled { get; set; }
+    public bool CompareProductsEnabled { get; set; }
+    public bool ForumEnabled { get; set; }
+    public bool RecentlyViewedProductsEnabled { get; set; }
+    public bool NewProductsEnabled { get; set; }
+    public bool AllowCustomersToApplyForVendorAccount { get; set; }
+    public bool AllowCustomersToCheckGiftCardBalance { get; set; }
+    public bool DisplayTaxShippingInfoFooter { get; set; }
+    public bool HidePoweredByNopCommerce { get; set; }
+
+    public int WorkingLanguageId { get; set; }
+
+    public IList<FooterTopicModel> Topics { get; set; }
+
+    public bool DisplaySitemapFooterItem { get; set; }
+    public bool DisplayContactUsFooterItem { get; set; }
+    public bool DisplayProductSearchFooterItem { get; set; }
+    public bool DisplayNewsFooterItem { get; set; }
+    public bool DisplayBlogFooterItem { get; set; }
+    public bool DisplayForumsFooterItem { get; set; }
+    public bool DisplayRecentlyViewedProductsFooterItem { get; set; }
+    public bool DisplayCompareProductsFooterItem { get; set; }
+    public bool DisplayNewProductsFooterItem { get; set; }
+    public bool DisplayCustomerInfoFooterItem { get; set; }
+    public bool DisplayCustomerOrdersFooterItem { get; set; }
+    public bool DisplayCustomerAddressesFooterItem { get; set; }
+    public bool DisplayShoppingCartFooterItem { get; set; }
+    public bool DisplayWishlistFooterItem { get; set; }
+    public bool DisplayApplyVendorAccountFooterItem { get; set; }
+
+    #region Nested classes
+
+    public partial record FooterTopicModel : BaseNopEntityModel
+    {
+        public string Name { get; set; }
+        public string SeName { get; set; }
+
+        public bool IncludeInFooterColumn1 { get; set; }
+        public bool IncludeInFooterColumn2 { get; set; }
+        public bool IncludeInFooterColumn3 { get; set; }
+    }
+
+    #endregion
 }
