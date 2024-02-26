@@ -185,6 +185,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
+    <None Include="Backup\nopCommerce35-2024224-1-54-51.bak" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup />
