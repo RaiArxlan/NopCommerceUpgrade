@@ -361,3 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+################################################
+# nopCommerce specific
+################################################
+# Ignore all files and folder inside Presentation/Nop.Web/Plugins
+Presentation/Nop.Web/Plugins/*
