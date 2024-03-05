@@ -1,0 +1,8 @@
+﻿Group: Test
+FriendlyName: Test Widget
+SystemName: Test.TestWidget
+Version: 1.0
+SupportedVersions: 3.50
+Author: Arslan
+DisplayOrder: 1
+FileName: Nop.Plugin.Test.TestWidget.dll
