@@ -1,0 +1,11 @@
+﻿{
+  "Group": "Test",
+  "FriendlyName": "Test Widget",
+  "SystemName": "Test.TestWidget",
+  "Version": "1.1",
+  "SupportedVersions": [ "4.70" ],
+  "Author": "Arslan",
+  "DisplayOrder": 1,
+  "FileName": "Nop.Plugin.Test.TestWidget.dll",
+  "Description": "This is a test widget with backend & UI to test nopCommerce upgrade from v3.5 to v4.6."
+}

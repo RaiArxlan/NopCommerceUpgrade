@@ -367,3 +367,6 @@ FodyWeavers.xsd
 ################################################
 # Ignore all files and folder inside Presentation/Nop.Web/Plugins
 Presentation/Nop.Web/Plugins/*
+
+# Ignore all temp files/thumbs folder inside Presentation/Nop.Web/Nop.Web/wwwroot/images/thumbs
+/Presentation/Nop.Web/wwwroot/images/thumbs

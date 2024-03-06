@@ -26,7 +26,6 @@ public class DistOfCustByCountryViewComponent : NopViewComponent
         await Task.CompletedTask;
 
         // dummy data
-
         var model = new List<CustomersDistribution>
         {
             new CustomersDistribution
@@ -57,12 +56,5 @@ public class DistOfCustByCountryViewComponent : NopViewComponent
         };
 
         return View("~/Plugins/Test.DistOfCustByCountryPlugin/Views/Index.cshtml", model);
-
     }
-
-    //public IViewComponentResult Invoke(string widgetZone, object additionalData)
-    //{
-    //    return Content("Hello World");
-    //}
-
 }

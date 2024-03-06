@@ -1,4 +1,5 @@
 ﻿using Autofac.Extensions.DependencyInjection;
+using Nop.Core;
 using Nop.Core.Configuration;
 using Nop.Core.Infrastructure;
 using Nop.Web.Framework.Infrastructure.Extensions;
@@ -45,6 +46,10 @@ public partial class Program
         app.ConfigureRequestPipeline();
         await app.StartEngineAsync();
 
-        await app.RunAsync();
+        // Resolve service IStoreContext and launch the application using predefined URL
+        var storeContext = app.Services.GetRequiredService<IStoreContext>();
+        var store = await storeContext.GetCurrentStoreAsync();
+
+        await app.RunAsync(store.Url ?? null);
     }
 }

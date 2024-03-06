@@ -68,6 +68,10 @@
       "Version": "4.70.3"
     },
     {
+      "SystemName": "Test.TestWidget",
+      "Version": "1.1"
+    },
+    {
       "SystemName": "Test.DistOfCustByCountryPlugin",
       "Version": "1.0"
     },
